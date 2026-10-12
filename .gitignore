@@ -1,0 +1,9 @@
+# datasets, checkpoints and experiment outputs live outside version control
+/data/
+/artifacts/
+
+__pycache__/
+*.egg-info/
+.ipynb_checkpoints/
+.idea/
+.DS_Store

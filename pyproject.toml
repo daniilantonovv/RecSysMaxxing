@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gptrec"
+version = "0.1.0"
+description = "GPT-2 next-item recommender, a reward model, and RL fine-tuning of one against the other"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.3",
+    "transformers>=4.40",
+    "numpy>=1.26",
+    "polars>=1.0",
+    "pandas>=2.0",
+    "huggingface_hub>=0.23",
+    "tqdm>=4.66",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+notebooks = ["jupyterlab", "ipywidgets"]
+
+[tool.setuptools.packages.find]
+include = ["gptrec*"]
+
+[tool.ruff]
+line-length = 160
