@@ -13,6 +13,7 @@ from torch import Tensor
 from gptrec.data.batches import EvalExamples, HistoryBatch
 from gptrec.data.log import PAD_ITEM, ItemTable
 from gptrec.evaluation.behavior import recommendation_profile
+from gptrec.evaluation.logged_feedback import logged_reception, logged_reward_per_user
 from gptrec.evaluation.relevance import contains, per_user_ranking_metrics, ranking_metrics
 from gptrec.evaluation.significance import paired_bootstrap
 from gptrec.models.policy import NextItemPolicy
@@ -60,7 +61,7 @@ class PolicyEvaluation:
 class ListEvaluation:
     """What is measured about one list per user, however the lists were produced. Tensors are on the CPU.
 
-    Metric names: <target set>/<metric>, profile/<statistic>, predicted/<reward model>/<signal>.
+    Metric names: <target set>/<metric>, profile/<statistic>, logged/<statistic>, predicted/<reward model>/<signal>.
     """
 
     metrics: dict[str, float]
@@ -155,12 +156,17 @@ class _ReceptionOfBatches:
 
 
 def list_quality(lists: Tensor, examples: EvalExamples, items: ItemTable, config: EvaluationConfig) -> dict[str, float]:
-    """Relevance of the lists against each target set, and their behaviour profile. Names: <target set>/<metric>, profile/<statistic>."""
+    """Everything about the lists that needs no reward model.
+
+    Relevance against each target set, the behaviour profile, and the logged response to the listed items the
+    users went on to consume. Names: <target set>/<metric>, profile/<statistic>, logged/<statistic>.
+    """
     reachable_ks = [k for k in config.ks if k <= lists.shape[1]]
     quality: dict[str, float] = {}
     for target_name, relevant in relevance_targets(examples, items, config.liked_threshold).items():
         quality |= _prefixed(target_name, ranking_metrics(lists, relevant, reachable_ks))
-    return quality | _prefixed("profile", recommendation_profile(lists, examples.history.items, items))
+    quality |= _prefixed("profile", recommendation_profile(lists, examples.history.items, items))
+    return quality | _prefixed("logged", logged_reception(lists, examples, config.liked_threshold))
 
 
 def predicted_reception(feedback: dict[str, Feedback], feedback_for_other_user: dict[str, Feedback], lists: Tensor, items: ItemTable) -> dict[str, float]:
@@ -178,13 +184,17 @@ def per_list_reception(predicted: Feedback, predicted_for_other_user: Feedback) 
 
     `personal_played_ratio` is what the list earns with its own user beyond what it would earn with another
     one: zero on average for lists that do not depend on the user. `chosen_played_ratio` counts an item the
-    user is predicted not to take up as zero.
+    user is predicted not to take up as zero. `relative_ratio` is the played ratio as a quantile among
+    everyone who consumed the item, which no item earns by being easy to finish.
     """
     played_ratio, played_ratio_for_other_user = predicted.played_ratio.mean(dim=1), predicted_for_other_user.played_ratio.mean(dim=1)
+    relative_ratio, relative_ratio_for_other_user = predicted.relative_ratio.mean(dim=1), predicted_for_other_user.relative_ratio.mean(dim=1)
     return {
         "played_ratio": played_ratio,
         "played_ratio_for_other_user": played_ratio_for_other_user,
         "personal_played_ratio": played_ratio - played_ratio_for_other_user,
+        "relative_ratio": relative_ratio,
+        "personal_relative_ratio": relative_ratio - relative_ratio_for_other_user,
         "session_continues": predicted.session_continues.mean(dim=1),
         "returns": predicted.returns.mean(dim=1),
         "is_chosen": predicted.is_chosen.mean(dim=1),
@@ -193,15 +203,27 @@ def per_list_reception(predicted: Feedback, predicted_for_other_user: Feedback) 
 
 
 def paired_comparison(before: ListEvaluation, after: ListEvaluation, examples: EvalExamples, items: ItemTable, config: EvaluationConfig) -> pd.DataFrame:
-    """Per-user change from `before` to `after`, with bootstrap intervals: relevance and predicted reception. One row per quantity."""
+    """Per-user change from `before` to `after`, with bootstrap intervals: relevance, logged and predicted reception. One row per quantity."""
     k = max(k for k in config.ks if k <= before.lists.shape[1])
     targets = relevance_targets(examples, items, config.liked_threshold)
-    compared = (("all", f"ndcg@{k}"), ("liked", f"ndcg@{k}"), ("skipped", f"recall@{k}"), ("above_usual", f"ndcg@{k}"), ("below_usual", f"recall@{k}"))
+    compared = (
+        ("all", f"ndcg@{k}"),
+        ("liked", f"ndcg@{k}"),
+        ("skipped", f"recall@{k}"),
+        ("above_usual", f"ndcg@{k}"),
+        ("below_usual", f"recall@{k}"),
+        ("new", f"ndcg@{k}"),
+        ("repeat", f"ndcg@{k}"),
+    )
     rows = {}
     for target_name, metric in compared:
         per_user_before = per_user_ranking_metrics(before.lists, targets[target_name], [k])[metric]
         per_user_after = per_user_ranking_metrics(after.lists, targets[target_name], [k])[metric]
         rows[f"{target_name}/{metric}"] = paired_bootstrap(per_user_before, per_user_after)
+    logged_before = logged_reward_per_user(before.lists, examples, config.liked_threshold)
+    logged_after = logged_reward_per_user(after.lists, examples, config.liked_threshold)
+    for quantity in logged_before:
+        rows[f"logged/{quantity}"] = paired_bootstrap(logged_before[quantity], logged_after[quantity])
     for name in before.feedback:
         reception_before = per_list_reception(before.feedback[name], before.feedback_for_other_user[name])
         reception_after = per_list_reception(after.feedback[name], after.feedback_for_other_user[name])
@@ -216,11 +238,14 @@ def relevance_targets(examples: EvalExamples, items: ItemTable, liked_threshold:
     "liked" and "skipped" split at a fixed played ratio: a recommender that learned to avoid skips should keep
     the first and lose the second. That split favours items that are easy to finish. "above_usual" and
     "below_usual" split at the item's own mean played ratio in the train period, so every item can fall on
-    either side: they tell whether the user took to the item more than people usually do.
+    either side: they tell whether the user took to the item more than people usually do. "repeat" and "new"
+    split by whether the item is in the visible history: where people return to what they know, replaying
+    the history already finds the first, and only the second asks for a recommender.
     """
     future_items = examples.future_items.cpu()
     played_ratio = examples.future_played_ratio.cpu()
     usual_played_ratio = torch.as_tensor(items.mean_played_ratio)[future_items]
+    is_in_history = contains(future_items, examples.history.items.cpu())
     no_item = torch.full_like(future_items, PAD_ITEM)
     return {
         "all": future_items,
@@ -228,6 +253,8 @@ def relevance_targets(examples: EvalExamples, items: ItemTable, liked_threshold:
         "skipped": future_items.where(played_ratio < liked_threshold, no_item),
         "above_usual": future_items.where(played_ratio >= usual_played_ratio, no_item),
         "below_usual": future_items.where(played_ratio < usual_played_ratio, no_item),
+        "repeat": future_items.where(is_in_history, no_item),
+        "new": future_items.where(~is_in_history, no_item),
     }
 
 

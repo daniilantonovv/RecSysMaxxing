@@ -46,6 +46,7 @@ def build_interaction_log(raw_events: pl.DataFrame, config: PreprocessingConfig)
 
     catalogue = _item_catalogue(events.filter(in_train_period), config)
     events = events.join(catalogue.select("item_id", "token"), on="item_id", how="inner")
+    events = events.with_columns(_relative_ratio(events, split))
     train_events_per_user = events.filter(in_train_period).group_by("user_id").agg(pl.len().alias("num_train_events"))
     active_users = train_events_per_user.filter(pl.col("num_train_events") >= config.min_user_events)
     events = _in_user_time_order(events.join(active_users.select("user_id"), on="user_id", how="semi"))
@@ -59,6 +60,7 @@ def build_interaction_log(raw_events: pl.DataFrame, config: PreprocessingConfig)
     return InteractionLog(
         item=events["token"].to_numpy().astype(np.int32),
         played_ratio=events["played_ratio"].to_numpy().astype(np.float32),
+        relative_ratio=events["relative_ratio"].to_numpy().astype(np.float32),
         session_continues=events["session_continues"].to_numpy().astype(bool),
         returns=events["returns"].to_numpy().astype(bool),
         session_continues_known=events["session_continues_known"].to_numpy().astype(bool),
@@ -102,6 +104,26 @@ def _retention_signals(events: pl.DataFrame, split: TemporalSplit, config: Prepr
         pl.Series("session_continues_known", timestamp + config.session_gap_seconds <= last_observed_second),
         pl.Series("returns_known", timestamp + config.return_window_seconds <= last_observed_second),
     ]
+
+
+def _relative_ratio(events: pl.DataFrame, split: TemporalSplit) -> pl.Series:
+    """For every event, the share of the item's train-period events that were played less, equally played ones counting half.
+
+    A quantile inside the item: 0.5 is what is usual for it, whatever its length or kind, and the train-period
+    mean of every item is exactly 0.5. A long series that hardly anybody finishes and a film that most people
+    finish are thereby put on one scale. Held-out events are ranked against the train period only.
+    Expects the `token` column of catalogue items.
+    """
+    token = events["token"].to_numpy().astype(np.float64)
+    played_ratio = events["played_ratio"].to_numpy().astype(np.float64)
+    # Played ratios lie in [0, 1], so the events of item `token` occupy [2 * token, 2 * token + 1] and no other item's do.
+    sort_key = 2.0 * token + played_ratio
+    train_keys = np.sort(sort_key[events["timestamp"].to_numpy() < split.validation_start])
+    first_event_of_item = np.searchsorted(train_keys, 2.0 * token, side="left")
+    num_train_events = np.searchsorted(train_keys, 2.0 * token + 1.0, side="right") - first_event_of_item
+    played_less = np.searchsorted(train_keys, sort_key, side="left") - first_event_of_item
+    played_at_most_as_much = np.searchsorted(train_keys, sort_key, side="right") - first_event_of_item
+    return pl.Series("relative_ratio", ((played_less + played_at_most_as_much) / (2.0 * num_train_events)).astype(np.float32))
 
 
 def _clock_shared_by_all_users(timestamp: np.ndarray, user_id: np.ndarray, longest_wait: int) -> np.ndarray:

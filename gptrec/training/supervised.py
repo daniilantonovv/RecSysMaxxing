@@ -60,6 +60,7 @@ class FeedbackLossWeights:
     session_continues: float = 0.25
     returns: float = 0.25
     is_chosen: float = 0.25
+    relative_ratio: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ def train_reward_model(log: InteractionLog, config: RewardModelTrainingConfig, d
         return {
             "validation_auc": played_ratio["auc"],
             "validation_mae": played_ratio["mae"],
+            "validation_relative_auc": prediction_quality(predicted.relative_ratio, predicted.predicted_relative_ratio)["auc"],
             "validation_returns_auc": retention_quality(predicted).loc["returns", "auc"],
             "validation_choice_auc": choice_quality(predicted)["auc"],
         }
@@ -200,8 +202,9 @@ def _next_item_cross_entropy(model: SequenceRecommender, batch: EventBatch, posi
 def feedback_loss(reward_model: RewardModel, batch: EventBatch, weights: FeedbackLossWeights) -> Tensor:
     """Weighted binary cross-entropy of every feedback signal on target events.
 
-    The played ratio is a soft label in [0, 1]. The retention signals are learned only from events whose
-    outcome the log knows. Whether an item is chosen is learned by contrast, see `choice_loss`.
+    The played ratio and its quantile inside the item are soft labels in [0, 1]. The retention signals are
+    learned only from events whose outcome the log knows. Whether an item is chosen is learned by contrast,
+    see `choice_loss`.
     """
     logits = reward_model(batch.items, batch.played_ratio)
     return (
@@ -209,6 +212,7 @@ def feedback_loss(reward_model: RewardModel, batch: EventBatch, weights: Feedbac
         + weights.session_continues * _mean_binary_cross_entropy(logits.session_continues, batch.session_continues, batch.is_target & batch.session_continues_known)
         + weights.returns * _mean_binary_cross_entropy(logits.returns, batch.returns, batch.is_target & batch.returns_known)
         + weights.is_chosen * choice_loss(reward_model, batch, logits.is_chosen)
+        + weights.relative_ratio * _mean_binary_cross_entropy(logits.relative_ratio, batch.relative_ratio, batch.is_target)
     )
 
 

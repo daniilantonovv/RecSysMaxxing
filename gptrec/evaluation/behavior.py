@@ -13,6 +13,7 @@ from gptrec.data.log import ItemTable
 from gptrec.evaluation.relevance import contains, first_occurrence
 
 HEAD_FRACTION = 0.01  # the "head" of the catalogue: its most popular 1% of items
+LISTS_PER_PASS = 4096  # bounds the memory of comparing every two items of many lists
 
 
 def recommendation_profile(recommended: Tensor, history_items: Tensor, items: ItemTable) -> dict[str, float]:
@@ -41,6 +42,26 @@ def recommendation_profile(recommended: Tensor, history_items: Tensor, items: It
         "mean_duration_seconds": torch.as_tensor(items.duration_seconds)[recommended].double().mean().item(),
         "mean_item_played_ratio": torch.as_tensor(items.mean_played_ratio)[recommended].double().mean().item(),
     }
+
+
+def pairwise_item_distances(lists: Tensor, unit_item_embeddings: Tensor) -> Tensor:
+    """Cosine distance between every two items of each list. [B, K, K]
+
+    lists: long [B, K]; unit_item_embeddings: [V+1, d], one row of unit length per item token.
+    """
+    embedded = unit_item_embeddings[lists]
+    return 1.0 - (embedded @ embedded.transpose(1, 2)).float()
+
+
+def intra_list_distance(lists: Tensor, unit_item_embeddings: Tensor) -> Tensor:
+    """Mean cosine distance between two different items of each list: how varied the list is. float [U]"""
+    list_length = lists.shape[1]
+    if list_length < 2:
+        return torch.zeros(len(lists))
+    is_other_item = ~torch.eye(list_length, dtype=torch.bool, device=lists.device)
+    num_pairs = list_length * (list_length - 1)
+    distances = [(pairwise_item_distances(part, unit_item_embeddings) * is_other_item).sum(dim=(1, 2)) / num_pairs for part in lists.split(LISTS_PER_PASS)]
+    return torch.cat(distances)
 
 
 def list_overlap(lists: Tensor, other_lists: Tensor) -> float:

@@ -6,23 +6,34 @@
     4. compare_baselines            popularity, replaying history, Markov chain, GRU4Rec, SASRec, BERT4Rec against the base recommender
     5. finetune                     RL fine-tuning, compared with the base recommender
     6. sweep_kl_weight              the trade-off between relevance and reward as the anchor weakens
+       sweep_kl_budget              the same trade-off with the distance from the base recommender fixed instead of the anchor weight
+       compare_advantage_estimators the leave-one-out baseline against the value model, at equal weights and at equal distances
+       compare_simulated_feedback   fine-tuning with a sampled response to the generated items instead of the expected one
        explain_reward_gain          how much of the gain depends on who receives the list, and how far item averages alone go
        compare_alternatives_to_rl   liked-only fine-tuning, re-ranking, off-policy REINFORCE, best of several sampled lists
        sweep_rewards                rewards for continuing the session and for returning, each at several anchor weights
        sweep_relevance_in_reward    relevance asked for by the reward itself, alone and together with the anchor
        sweep_personal_rewards       rewards that pay only for what depends on the user
+       sweep_relative_reward        a reward for the played ratio relative to what is usual for the item
+       compare_list_reward          a reward that depends on the list as a whole, against greedy ways of maximising it
        ablate_sequence_credit       fine-tuning that credits each item with its own reward only, or sees one item per episode
        analyse_multistep
 
+A stage whose grid of settings is empty in the configuration does nothing.
+
 Every stage reads what it needs from the experiment's home directory and writes its checkpoints and
 reports back there. A stage whose checkpoint already exists does not train again, so an interrupted
-run continues where it stopped. A home directory belongs to one configuration.
+run continues where it stopped. A home directory belongs to one configuration; `reuse_artifacts` starts
+one from the models and the finished runs of an earlier session that differed only in the grids of its sweeps.
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import re
+import shutil
+import stat
 import time
 from dataclasses import asdict, dataclass, field, replace
 from functools import cached_property
@@ -32,13 +43,14 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import torch
+import torch.nn.functional as F
 
 from gptrec import plots
 from gptrec.baselines.suite import BaselineConfig, fit_baselines
 from gptrec.data.batches import EvalExamples, EventWindows, build_eval_examples
 from gptrec.data.log import InteractionLog, Period
 from gptrec.data.preprocess import PreprocessingConfig, build_interaction_log
-from gptrec.evaluation.behavior import list_overlap
+from gptrec.evaluation.behavior import intra_list_distance, list_overlap
 from gptrec.evaluation.policy_report import (
     EvaluationConfig,
     ListEvaluation,
@@ -60,6 +72,7 @@ from gptrec.evaluation.reward_model_metrics import (
     error_by_group,
     predict_heldout_feedback,
     quality_by_origin,
+    relative_ratio_report,
     retention_quality,
     reward_model_report,
     signal_spread_over_candidates,
@@ -82,7 +95,7 @@ from gptrec.rollout import (
 )
 from gptrec.training.checkpoint import load_policy, load_reward_model, save_model
 from gptrec.training.off_policy import LoggedReturnConfig, finetune_on_logged_returns
-from gptrec.training.rl import RLConfig, finetune_with_rl
+from gptrec.training.rl import AdvantageEstimator, RLConfig, finetune_with_rl
 from gptrec.training.supervised import (
     FeedbackLossWeights,
     OptimizationConfig,
@@ -105,13 +118,23 @@ CHOSEN_RATIO = RewardSpec(weigh_by_choice=True)
 LOGGED_RELEVANCE = RewardSpec(played_ratio_weight=0.0, logged_relevance_weight=1.0)
 PERSONAL_RATIO = RewardSpec(ratio_baseline=RatioBaseline.OTHER_USER)
 RATIO_ABOVE_ITEM_MEAN = RewardSpec(ratio_baseline=RatioBaseline.ITEM_MEAN)
+RELATIVE_RATIO = RewardSpec(played_ratio_weight=0.0, relative_ratio_weight=1.0)
 # The signals of the held-out reward model that a reward can be aimed at: what the trade-off figures put against relevance.
-JUDGED_SIGNALS = ("played_ratio", "personal_played_ratio", "session_continues", "returns")
+JUDGED_SIGNALS = ("played_ratio", "personal_played_ratio", "session_continues", "returns", "relative_ratio")
 REALISED_KL = "training/kl_to_reference"  # nats per generated item between a fine-tuned policy and the base recommender
-REALISED_KL_AVERAGING_STEPS = 50  # last iterations of a run over which it is averaged
+# What a fine-tuning run looked like when it ended: metric name -> the recorded quantity it averages over the last iterations.
+TRAINING_STATISTICS = {
+    REALISED_KL: "kl_to_reference",
+    "training/anchor_weight": "reference_kl_weight",
+    "training/clip_fraction": "clip_fraction",
+    "training/value_explained_variance": "value_explained_variance",
+}
+END_OF_TRAINING_STEPS = 50  # last iterations of a run over which those are averaged
+INTRA_LIST_DISTANCE = "profile/intra_list_distance"  # mean cosine distance between two items of a list, in the base recommender's embeddings
 TRAINING_CURVES = [
     "reward",
     "kl_to_reference",
+    "reference_kl_weight",
     "entropy",
     "distinct_action_share",
     "logged_hit_rate",
@@ -123,8 +146,32 @@ TRAINING_CURVES = [
     "value_explained_variance",
 ]
 TRAINING_CURVE_SMOOTHING_STEPS = 20
+CONFIG_RECORD = "experiment_config.json"
 RUN_TIME_SAFETY_FACTOR = 1.25  # a sweep run is assumed to take this much longer than the last run suggests
 RESERVE_FOR_LAST_STAGES_SECONDS = 30 * 60  # kept free for the cheap stages that follow the sweeps
+# The settings that choose which runs are made and how they are compared, as opposed to what a model or a run is.
+RUN_GRIDS = (
+    "kl_weights",
+    "rewards",
+    "reward_kl_weights",
+    "choice_reward_kl_weights",
+    "logged_relevance_weights",
+    "logged_relevance_kl_weights",
+    "personal_reward_kl_weights",
+    "credit_ablation_kl_weights",
+    "rerank_relevance_weights",
+    "importance_weight_caps",
+    "sampled_list_counts",
+    "evaluate_sweeps_on_validation",
+    "relevance_tolerance",
+    "kl_budgets",
+    "estimator_kl_weights",
+    "high_learning_rate_factor",
+    "sampled_feedback_kl_weights",
+    "relative_reward_kl_weights",
+    "diversity_weights",
+    "diversity_kl_weights",
+)
 
 
 @dataclass(frozen=True)
@@ -161,6 +208,19 @@ class ExperimentConfig:
     importance_weight_caps: tuple[float, ...] = (0.5, 2.0, 10.0)  # its knob: how far it may move from the base recommender
     sampled_list_counts: tuple[int, ...] = (2, 8, 32)  # lists sampled per user when the best of several is served
     sample_from_top: int = 4  # those lists are sampled among this many most likely items per position
+    # Sweep runs are also evaluated on validation requests, so that an operating point can be chosen without the test period:
+    evaluate_sweeps_on_validation: bool = True
+    relevance_tolerance: float = 0.05  # share of the base recommender's validation NDCG a chosen run may lose
+    # What the anchor weight means. The stages below do nothing while their grid is empty.
+    kl_budgets: tuple[float, ...] = ()  # distances from the base recommender, in nats per item, that an adaptive anchor weight holds runs at
+    estimator_kl_weights: tuple[float, ...] = ()  # anchor weights at which the leave-one-out baseline is compared with the value model
+    leave_one_out_rollouts: int = 4  # lists per history under that baseline; the number of lists per iteration stays the same
+    high_learning_rate_factor: float | None = None  # one more run with the policy's learning rate multiplied by this: does PPO's clipping ever engage
+    sampled_feedback_kl_weights: tuple[float, ...] = ()  # anchor weights at which fine-tuning is repeated with sampled simulated feedback
+    # Rewards that an item cannot earn on its own account:
+    relative_reward_kl_weights: tuple[float, ...] = ()  # anchor weights at which the played ratio relative to the item's usual one is the reward
+    diversity_weights: tuple[float, ...] = ()  # weight of intra-list distance against the main run's reward
+    diversity_kl_weights: tuple[float, ...] = (0.3,)  # anchor weights at which each of those is tried
 
     def __post_init__(self) -> None:
         if self.horizon >= self.transformer.max_positions:
@@ -169,6 +229,8 @@ class ExperimentConfig:
             raise ValueError(f"metrics @{max(self.ks)} need generated lists of at least that length, but horizon={self.horizon}")
         if self.rerank_candidates < self.horizon:
             raise ValueError("re-ranking needs at least as many candidates as the list is long")
+        if self.rl.histories_per_step % self.leave_one_out_rollouts != 0:
+            raise ValueError("leave_one_out_rollouts must divide histories_per_step, so that both estimators see as many lists per iteration")
 
     @property
     def history_len(self) -> int:
@@ -193,14 +255,16 @@ class ExperimentConfig:
 def smoke_test_config(config: ExperimentConfig, max_users: int) -> ExperimentConfig:
     """`config` shrunk until every stage runs in minutes, even on a CPU: few users, tiny models, a handful of steps.
 
-    What is specific to the dataset - split lengths, session gap, generation constraints - is kept, so the
-    same code paths run. The numbers a smoke test produces mean nothing.
+    What is specific to the dataset - split lengths, session gap, generation constraints - is kept, and so is
+    every grid that `config` leaves empty, so the same code paths run and a stage the configuration switches off
+    stays off. The numbers a smoke test produces mean nothing.
     """
     optimization = OptimizationConfig(epochs=1, batch_size=16, warmup_steps=5)
     horizon = 4
     preprocessing = replace(config.preprocessing, max_items=1_000, min_item_events=5, min_user_events=min(config.preprocessing.min_user_events, 20))
     rl = replace(config.rl, num_steps=6, histories_per_step=16, ppo_epochs=2, value_warmup_steps=2, evaluate_every=3, mixed_precision=True)
-    return replace(
+    switched_off = {name: getattr(config, name) for name in RUN_GRIDS if not getattr(config, name)}
+    shrunk = replace(
         config,
         preprocessing=preprocessing,
         max_users=max_users,
@@ -229,15 +293,75 @@ def smoke_test_config(config: ExperimentConfig, max_users: int) -> ExperimentCon
         logged_returns=replace(config.logged_returns, optimization=optimization),
         importance_weight_caps=(0.5,),
         sampled_list_counts=(2,),
+        kl_budgets=(0.5,),
+        estimator_kl_weights=(1.0,),
+        leave_one_out_rollouts=2,
+        high_learning_rate_factor=10.0,
+        sampled_feedback_kl_weights=(1.0,),
+        relative_reward_kl_weights=(1.0,),
+        diversity_weights=(1.0,),
+        diversity_kl_weights=(1.0,),
     )
+    return replace(shrunk, **switched_off)
 
 
 def run_smoke_test(raw_events: pl.DataFrame, config: ExperimentConfig, home: str | Path, device: torch.device, max_users: int = 200) -> None:
     """Runs all stages of `config`, shrunk, on the first `max_users` users: finds out in minutes whether anything is broken.
 
-    `max_users` must leave enough data after filtering; datasets with short histories need more users.
+    A second session then starts from the artifacts of the first with one more anchor weight in its sweep, the
+    way a session tops up an earlier one. `max_users` must leave enough data after filtering; datasets with
+    short histories need more users.
     """
-    Experiment(smoke_test_config(config, max_users), home, device, show_figures=False).run(raw_events)
+    home = Path(home)
+    first_session = smoke_test_config(config, max_users)
+    Experiment(first_session, home / "first_session", device, show_figures=False).run(raw_events)
+
+    second_session = replace(first_session, kl_weights=(*first_session.kl_weights, 0.5))
+    reuse_artifacts(home / "first_session", home / "second_session", second_session)
+    continued = Experiment(second_session, home / "second_session", device, show_figures=False)
+    continued.prepare_data(raw_events)
+    continued.pretrain_policy()
+    continued.train_reward_models()
+    continued.finetune()
+    continued.sweep_kl_weight()
+
+
+def reuse_artifacts(previous_home: str | Path, home: str | Path, config: ExperimentConfig) -> None:
+    """Starts `home` from the interaction log, the models and the finished runs of an earlier session, so that only what is missing is trained.
+
+    A checkpoint is found by the name of its run, and the name does not say which base recommender, reward
+    models or optimiser settings produced it. The earlier session must therefore have had the configuration
+    `config` in everything but the grids of its sweeps (`RUN_GRIDS`).
+    """
+    previous_home, home = Path(previous_home), Path(home)
+    absent = [part for part in (CONFIG_RECORD, "data", "artifacts") if not (previous_home / part).exists()]
+    if absent:
+        raise FileNotFoundError(f"{previous_home} is not the home directory of a session: it has no {', '.join(absent)}")
+    previous = json.loads((previous_home / CONFIG_RECORD).read_text())
+    current = json.loads(json.dumps(asdict(config)))
+    differing = sorted(name for name in current if name not in RUN_GRIDS and previous.get(name) != current[name])
+    if differing:
+        raise ValueError(f"{previous_home} was produced with a different {', '.join(differing)}: its checkpoints do not fit this configuration")
+    for part in ("data", "artifacts"):
+        copied = home / part
+        shutil.copytree(previous_home / part, copied, dirs_exist_ok=True, copy_function=shutil.copyfile)
+        # An attached output is read-only, and a copied directory inherits that; this session has to write into it.
+        for directory in (copied, *(path for path in copied.rglob("*") if path.is_dir())):
+            directory.chmod(directory.stat().st_mode | stat.S_IWUSR)
+
+
+def _timed(stage):
+    """Makes a stage of `Experiment` record how long it took, in the "stage_minutes" report."""
+
+    @functools.wraps(stage)
+    def timed_stage(experiment: Experiment, *args, **kwargs):
+        started = time.monotonic()
+        try:
+            return stage(experiment, *args, **kwargs)
+        finally:
+            experiment._record_stage_time(stage.__name__, time.monotonic() - started)
+
+    return timed_stage
 
 
 class Experiment:
@@ -260,9 +384,13 @@ class Experiment:
         self.checkpoints = self.home / "artifacts"
         _bind_directory_to_config(self.home, config)
         self.reports = ReportWriter(self.checkpoints / "reports", show_figures)
+        # The reports are archived on their own; with the configuration next to them they say what produced them.
+        (self.reports.directory / CONFIG_RECORD).write_text((self.home / CONFIG_RECORD).read_text())
         self._examples: dict[str, EvalExamples] = {}
         self._test_evaluations: dict[str, PolicyEvaluation] = {}
+        self._validation_metrics: dict[str, dict[str, float]] = {}
         self._reranked_evaluations: dict[str, ListEvaluation] = {}
+        self._stage_seconds: dict[str, float] = {}
 
     def run(self, raw_events: pl.DataFrame) -> None:
         """All stages in order."""
@@ -272,16 +400,22 @@ class Experiment:
         self.compare_baselines()
         self.finetune()
         self.sweep_kl_weight()
+        self.sweep_kl_budget()
+        self.compare_advantage_estimators()
+        self.compare_simulated_feedback()
         self.explain_reward_gain()
         self.compare_alternatives_to_rl()
         self.sweep_rewards()
         self.sweep_relevance_in_reward()
         self.sweep_personal_rewards()
+        self.sweep_relative_reward()
+        self.compare_list_reward()
         self.ablate_sequence_credit()
         self.analyse_multistep()
 
     # ---- stage 1: data -------------------------------------------------------------------------------
 
+    @_timed
     def prepare_data(self, raw_events: pl.DataFrame) -> pd.Series:
         """Builds the interaction log from raw events (see `gptrec.data.preprocess`) and summarises it."""
         log_is_complete = (self.log_directory / "split.json").exists()
@@ -294,6 +428,7 @@ class Experiment:
 
     # ---- stage 2: base recommender -------------------------------------------------------------------
 
+    @_timed
     def pretrain_policy(self) -> pd.DataFrame:
         """Trains the base recommender. Returns its test relevance, ranked and generated, next to the popularity floor."""
         if not self._pretrained_policy_path.exists():
@@ -314,6 +449,7 @@ class Experiment:
 
     # ---- stage 3: reward models ----------------------------------------------------------------------
 
+    @_timed
     def train_reward_models(self) -> pd.DataFrame:
         """Trains two reward models on disjoint halves of the users. Returns their played-ratio quality on the test period.
 
@@ -349,6 +485,8 @@ class Experiment:
         agreement = np.corrcoef(predictions["train"].predicted_played_ratio, predictions["heldout"].predicted_played_ratio)[0, 1]
         self.reports.table("reward_model_agreement", pd.Series({"correlation of predicted played ratio": agreement}))
 
+        relative_ratio_quality = pd.concat({name: relative_ratio_report(predicted) for name, predicted in predictions.items()}, names=["reward model", "predictor"])
+        self.reports.table("reward_model_relative_ratio", relative_ratio_quality)
         played_ratio_quality = pd.concat(
             {name: reward_model_report(predicted, items) for name, predicted in predictions.items()},
             names=["reward model", "predictor"],
@@ -357,6 +495,7 @@ class Experiment:
 
     # ---- stage 4: baselines --------------------------------------------------------------------------
 
+    @_timed
     def compare_baselines(self) -> pd.DataFrame:
         """Fits the baselines and returns their test results next to the GPT recommender's, one column per model.
 
@@ -381,6 +520,7 @@ class Experiment:
 
     # ---- stage 5: RL fine-tuning ---------------------------------------------------------------------
 
+    @_timed
     def finetune(self) -> pd.DataFrame:
         """Fine-tunes the recommender with RL. Returns every test metric of the base and the fine-tuned recommender."""
         if not self._rl_policy_path.exists():
@@ -393,7 +533,8 @@ class Experiment:
 
         pretrained, rl = self._test_evaluation("pretrained", self.pretrained_policy), self._test_evaluation("rl", self.rl_policy)
         pretrained.metrics.setdefault(REALISED_KL, 0.0)
-        rl.metrics.setdefault(REALISED_KL, self._realised_kl("rl_training"))
+        if REALISED_KL not in rl.metrics:
+            rl.metrics |= self._end_of_training("rl_training")
         exposure = _exposure_change(self.log, before=pretrained, after=rl)
         self.reports.table("rl_exposure_change", exposure)
         attributes = ["popularity", "duration_seconds", "mean_played_ratio"]
@@ -413,6 +554,7 @@ class Experiment:
 
     # ---- stage 6: trade-off, reward design, alternatives to RL, multi-step generation ----------------
 
+    @_timed
     def sweep_kl_weight(self) -> pd.DataFrame:
         """One fine-tuning run per KL weight: the frontier between relevance and predicted reward."""
         metrics = self._sweep("kl_sweep", self._kl_sweep_runs)
@@ -421,11 +563,110 @@ class Experiment:
         frontier = plots.reward_relevance_frontier(metrics, [f"top_k/all/ndcg@{k}", f"next_k/liked/ndcg@{k}"], reward_rows)
         self.reports.figure("kl_sweep_frontier", frontier)
         # The anchor weight means different things under different estimators and datasets; the distance actually travelled does not.
-        runs = {"RL, KL sweep": _runs_table({"pretrained": self._pretrained_lists} | self._generated_lists_of(self._kl_sweep_runs))}
+        runs = {"RL, KL sweep": _runs_table({"pretrained": self._pretrained_lists} | self._generated_lists_of(self._kl_sweep_runs)).sort_values(REALISED_KL)}
         measures = [f"all/ndcg@{k}", "predicted/heldout/played_ratio", "profile/catalog_coverage"]
         self.reports.figure("kl_sweep_by_realised_kl", plots.trade_off(runs, reward_column=REALISED_KL, measure_columns=measures))
-        return metrics.loc[self._summary_rows]
+        if self.config.evaluate_sweeps_on_validation:
+            self.reports.table("kl_sweep_selection", self._selection_on_validation(["pretrained", *self._kl_sweep_runs]))
+        return metrics.reindex(self._summary_rows)
 
+    @_timed
+    def sweep_kl_budget(self) -> pd.DataFrame:
+        """One fine-tuning run per KL budget: the anchor weight adapts until the policy sits that far from the base recommender.
+
+        An anchor weight is measured against the standardised advantages, so the same weight is a different
+        constraint under another estimator, reward or dataset. A budget is the constraint itself. If the runs
+        land on the frontier of the weight sweep, the budget is a way of walking that frontier in comparable steps.
+        """
+        if not self.config.kl_budgets:
+            return pd.DataFrame()
+        metrics = self._sweep("kl_budget_sweep", self._kl_budget_runs)
+        curves = {
+            "fixed anchor weight": self._generated_lists_of(self._kl_sweep_runs),
+            "KL budget": self._generated_lists_of(self._kl_budget_runs),
+            "pretrained": {"pretrained": self._pretrained_lists},
+        }
+        self._trade_off_figures("kl_budget_sweep", curves, signals=JUDGED_SIGNALS[:1])
+        return metrics.reindex(self._summary_rows)
+
+    @_timed
+    def compare_advantage_estimators(self) -> pd.DataFrame:
+        """Does the anchor weight mean the same under another advantage estimator, and do the estimators differ at equal distance?
+
+        "leave-one-out" replaces the value model by the mean return of the other lists sampled for the same
+        history. The number of lists per iteration, the learning rate and the passes over each batch are those
+        of the KL sweep, so only the baseline differs from its run at the same weight. Under a KL budget both
+        estimators end equally far from the base recommender and are compared on what they found there. One
+        more run multiplies the policy's learning rate, to see whether PPO's clipping ever takes part.
+        """
+        rollouts = self.config.leave_one_out_rollouts
+        leave_one_out = {
+            "advantage_estimator": AdvantageEstimator.LEAVE_ONE_OUT,
+            "rollouts_per_history": rollouts,
+            "histories_per_step": self.config.rl.histories_per_step // rollouts,
+        }
+        reward, main_weight = self.config.rl.reward, self.config.rl.reference_kl_weight
+        at_equal_weight = {
+            f"leave-one-out, kl={weight}": self.config.sweep_run(reward, weight, **leave_one_out)
+            for weight in sorted(self.config.estimator_kl_weights, reverse=True)
+        }
+        at_equal_distance = {
+            f"leave-one-out, kl_budget={budget}": self.config.sweep_run(reward, main_weight, target_kl=budget, **leave_one_out)
+            for budget in (sorted(self.config.kl_budgets) if at_equal_weight else [])
+        }
+        faster = {}
+        if self.config.high_learning_rate_factor is not None:
+            factor = self.config.high_learning_rate_factor
+            faster[f"learning rate x{factor}, kl={main_weight}"] = self.config.sweep_run(reward, main_weight, learning_rate=factor * self.config.rl.learning_rate)
+        if not (at_equal_weight or faster):
+            return pd.DataFrame()
+
+        metrics = self._sweep("advantage_estimators", at_equal_weight | at_equal_distance | faster)
+        curves = {
+            "value model, fixed anchor weight": self._generated_lists_of(self._kl_sweep_runs),
+            "value model, KL budget": self._generated_lists_of(self._kl_budget_runs),
+            "leave-one-out, fixed anchor weight": self._generated_lists_of(at_equal_weight),
+            "leave-one-out, KL budget": self._generated_lists_of(at_equal_distance),
+            "higher learning rate": self._generated_lists_of(faster),
+            "pretrained": {"pretrained": self._pretrained_lists},
+        }
+        k = max(self.config.ks)
+        by_distance = {method: _runs_table(runs).sort_values(REALISED_KL) for method, runs in curves.items() if runs}
+        measures = [f"all/ndcg@{k}", "predicted/heldout/played_ratio", "profile/catalog_coverage"]
+        self.reports.figure("advantage_estimators_by_realised_kl", plots.trade_off(by_distance, reward_column=REALISED_KL, measure_columns=measures))
+        return metrics.reindex(self._summary_rows)
+
+    @_timed
+    def compare_simulated_feedback(self) -> pd.DataFrame:
+        """Fine-tuning with a sampled response to the generated items instead of the expected one.
+
+        The expected played ratio of an item is typically near one half, a response the reward model has hardly
+        seen: real ones are close to 0 or to 1. Sampling "finished" or "skipped" with the predicted probability
+        keeps the simulated history inside what the model was trained on. Every policy is then judged under each
+        assumption, which separates what a policy learned from how its lists are scored.
+        """
+        anchor_weights = sorted(self.config.sampled_feedback_kl_weights, reverse=True)
+        if not anchor_weights:
+            return pd.DataFrame()
+        reward = self.config.rl.reward
+        with_expected = {f"kl={weight}": self.config.sweep_run(reward, weight) for weight in anchor_weights}
+        with_sampled = {
+            f"sampled feedback, kl={weight}": self.config.sweep_run(reward, weight, simulated_feedback=SimulatedFeedback.SAMPLED) for weight in anchor_weights
+        }
+        metrics = self._sweep("simulated_feedback_sweep", with_expected | with_sampled)
+
+        predicted_reward = {}
+        for run_name in [*with_expected, *with_sampled]:
+            if self._sweep_checkpoint(run_name).exists():
+                policy = load_policy(self._sweep_checkpoint(run_name), self.device)
+                predicted_reward[run_name] = {
+                    mode.value: self._evaluate(policy, "test", simulated_feedback=mode).metrics["predicted/heldout/played_ratio"] for mode in SimulatedFeedback
+                }
+        by_assumption = pd.DataFrame(predicted_reward).T.rename_axis("fine-tuning run").rename_axis("feedback assumed when judging", axis=1)
+        self.reports.table("simulated_feedback_cross_judged", by_assumption)
+        return metrics.reindex(self._summary_rows)
+
+    @_timed
     def explain_reward_gain(self) -> pd.DataFrame:
         """Whose reward is it? Returns, per method, how much of its predicted gain other users would give the same lists.
 
@@ -464,6 +705,7 @@ class Experiment:
         self._trade_off_figures("reward_gain", curves, signals=JUDGED_SIGNALS[:2])
         return self.reports.table("reward_gain_decomposition", decomposition)
 
+    @_timed
     def compare_alternatives_to_rl(self) -> pd.DataFrame:
         """Ways of raising the reward without on-policy RL, next to RL. Returns one column per method and setting.
 
@@ -500,6 +742,7 @@ class Experiment:
         methods = {"pretrained": pretrained, "RL": rl, "liked-only fine-tuning": liked_only} | off_policy | reranking | best_of_sampled
         return self.reports.table("alternatives_to_rl", _runs_table(methods).T)
 
+    @_timed
     def sweep_rewards(self) -> pd.DataFrame:
         """One fine-tuning run per alternative reward and anchor weight.
 
@@ -516,8 +759,9 @@ class Experiment:
         curves |= {reward_name: self._generated_lists_of(runs) for reward_name, runs in runs_by_reward.items()}
         curves["pretrained"] = {"pretrained": self._pretrained_lists}
         self._trade_off_figures("reward_sweep", curves, signals=JUDGED_SIGNALS)
-        return metrics.loc[self._summary_rows]
+        return metrics.reindex(self._summary_rows)
 
+    @_timed
     def sweep_relevance_in_reward(self) -> pd.DataFrame:
         """Can the reward itself ask for relevance, and what does the anchor add to it?
 
@@ -543,8 +787,9 @@ class Experiment:
         curves |= {f"{reward_name}, anchor sweep": self._generated_lists_of(anchor_sweep) for reward_name, anchor_sweep in ratio_and_logged_relevance.items()}
         curves |= {"logged relevance only, no anchor": self._generated_lists_of(logged_relevance_only), "pretrained": {"pretrained": self._pretrained_lists}}
         self._trade_off_figures("relevance_reward_sweep", curves, signals=JUDGED_SIGNALS[:2])
-        return metrics.loc[self._summary_rows]
+        return metrics.reindex(self._summary_rows)
 
+    @_timed
     def sweep_personal_rewards(self) -> pd.DataFrame:
         """Fine-tuning for the part of the played ratio that depends on who receives the list.
 
@@ -566,30 +811,103 @@ class Experiment:
             "pretrained": {"pretrained": self._pretrained_lists},
         }
         self._trade_off_figures("personal_reward_sweep", curves, signals=("personal_played_ratio", "played_ratio"))
-        return metrics.loc[self._summary_rows]
+        return metrics.reindex(self._summary_rows)
 
+    @_timed
+    def sweep_relative_reward(self) -> pd.DataFrame:
+        """Fine-tuning for the played ratio relative to what is usual for the item.
+
+        The plain played ratio pays for items that are easy to finish, whoever receives them: a film over a
+        series, a short track over a long one. The relative ratio is the user's played ratio as a quantile among
+        everyone who consumed the same item. It is 0.5 for every item on average, so a policy earns it only by
+        matching items to the users who take to them more than others do. Re-ranking the base recommender's
+        candidates by the same signal is the reference without RL.
+        """
+        anchor_weights = sorted(self.config.relative_reward_kl_weights, reverse=True)
+        if not anchor_weights:
+            return pd.DataFrame()
+        runs = {f"relative ratio, kl={weight}": self.config.sweep_run(RELATIVE_RATIO, weight) for weight in anchor_weights}
+        metrics = self._sweep("relative_reward_sweep", runs)
+        reranked = self._reranked("re-ranking by relative ratio", self._scored_test_candidates, RELATIVE_RATIO)
+        self.reports.table("relative_reward_reranking", _runs_table(reranked).T)
+        curves = {
+            "played ratio, anchor sweep": self._generated_lists_of(self._kl_sweep_runs),
+            "relative ratio, anchor sweep": self._generated_lists_of(runs),
+            "re-ranking by relative ratio": reranked,
+            "pretrained": {"pretrained": self._pretrained_lists},
+        }
+        self._trade_off_figures("relative_reward_sweep", curves, signals=("relative_ratio", "played_ratio"))
+        return metrics.reindex(self._summary_rows)
+
+    @_timed
+    def compare_list_reward(self) -> pd.DataFrame:
+        """A reward that depends on the list as a whole: the main run's reward plus each item's distance to the items before it.
+
+        Summed over a list, the second term is the list's mean pairwise distance in the base recommender's
+        embedding space. An item's worth then depends on its neighbours, and scoring items one at a time no
+        longer finds the best list. RL is compared with the greedy ways of maximising the same reward: maximal
+        marginal relevance over the base recommender's candidates, which fills the list one position at a time,
+        and the best of several sampled lists. The last column of the saved table is the reward itself as the
+        held-out reward model sees it, per item of the list.
+        """
+        if not self.config.diversity_weights:
+            return pd.DataFrame()
+        k = max(self.config.ks)
+        anchor_weights = sorted(self.config.diversity_kl_weights, reverse=True)
+        rewards = {f"ratio + {weight} x distance": replace(self.config.rl.reward, diversity_weight=weight) for weight in sorted(self.config.diversity_weights)}
+        rl_runs = {label: {f"{label}, kl={anchor}": self.config.sweep_run(reward, anchor) for anchor in anchor_weights} for label, reward in rewards.items()}
+        metrics = self._sweep("list_reward_sweep", {name: run for runs in rl_runs.values() for name, run in runs.items()})
+
+        methods = {}
+        for label, reward in rewards.items():
+            curves = {
+                "RL, anchor sweep": self._generated_lists_of(rl_runs[label]),
+                "greedy re-ranking, weight sweep": self._reranked(f"greedy re-ranking, {label}", self._scored_test_candidates, reward),
+                "best of N sampled lists": {
+                    f"best of {count} sampled lists, {label}": self._evaluate_lists(self._best_of_sampled_lists(count, reward)) for count in self.config.sampled_list_counts
+                },
+                "played ratio only, anchor sweep": self._generated_lists_of(self._kl_sweep_runs),
+                "pretrained": {"pretrained": self._pretrained_lists},
+            }
+            measures = [f"all/ndcg@{k}", INTRA_LIST_DISTANCE, "profile/catalog_coverage"]
+            self._trade_off_figures(f"list_reward_{_file_name(label)}", curves, signals=JUDGED_SIGNALS[:1], measures=measures)
+            table = _runs_table({name: evaluation for runs in curves.values() for name, evaluation in runs.items()})
+            # Over a list the distance terms add up to half its mean pairwise distance per item.
+            table["list reward (held-out)"] = table["predicted/heldout/played_ratio"] + reward.diversity_weight * table[INTRA_LIST_DISTANCE] / 2
+            methods[label] = table
+        self.reports.table("list_reward_methods", pd.concat(methods, names=["reward", "method"]))
+        return metrics.reindex(self._summary_rows)
+
+    @_timed
     def ablate_sequence_credit(self) -> pd.DataFrame:
         """Does fine-tuning use the fact that a list is a sequence?
 
         "discount=0" credits every item with its own reward only, never with the rewards of the items after it.
         "horizon=1" samples one item per episode while fine-tuning, so nothing is learned from a generated
-        context; its lists are still generated item by item when evaluated. Both are compared with the runs of
-        the KL sweep at the same anchor weights, which credit every item with the whole rest of the list.
+        context; its lists are still generated item by item when evaluated. Both are compared with runs that
+        credit every item with the whole rest of the list: at the same anchor weights, and under the same KL
+        budgets. Changing the credit changes what a weight means, so only the budget runs compare policies
+        that moved equally far; for one-item episodes the distance is that of the first position only.
         """
         anchor_weights = sorted(self.config.credit_ablation_kl_weights, reverse=True)
-        reward, one_item = self.config.rl.reward, replace(self.config.rl.generation, horizon=1)
+        budgets = sorted(self.config.kl_budgets)
+        reward, one_item, main_weight = self.config.rl.reward, replace(self.config.rl.generation, horizon=1), self.config.rl.reference_kl_weight
         own_reward_only = {f"discount=0, kl={weight}": self.config.sweep_run(reward, weight, discount=0.0) for weight in anchor_weights}
+        own_reward_only |= {f"discount=0, kl_budget={budget}": self.config.sweep_run(reward, main_weight, discount=0.0, target_kl=budget) for budget in budgets}
         one_item_episodes = {f"horizon=1, kl={weight}": self.config.sweep_run(reward, weight, generation=one_item) for weight in anchor_weights}
+        one_item_episodes |= {f"horizon=1, kl_budget={budget}": self.config.sweep_run(reward, main_weight, generation=one_item, target_kl=budget) for budget in budgets}
         metrics = self._sweep("sequence_credit_ablation", own_reward_only | one_item_episodes)
+        whole_rest_of_the_list = [f"kl={weight}" for weight in anchor_weights] + [f"kl_budget={budget}" for budget in budgets]
         curves = {
-            "whole rest of the list (KL sweep)": self._generated_lists_of([f"kl={weight}" for weight in anchor_weights]),
+            "whole rest of the list": self._generated_lists_of(whole_rest_of_the_list),
             "own reward only (discount 0)": self._generated_lists_of(own_reward_only),
             "one item per episode (horizon 1)": self._generated_lists_of(one_item_episodes),
             "pretrained": {"pretrained": self._pretrained_lists},
         }
         self._trade_off_figures("sequence_credit_ablation", curves, signals=JUDGED_SIGNALS[:1])
-        return metrics.loc[self._summary_rows]
+        return metrics.reindex(self._summary_rows)
 
+    @_timed
     def analyse_multistep(self) -> pd.DataFrame:
         """How the generated list changes along its positions. Returns NDCG of ranked against generated lists.
 
@@ -665,11 +983,26 @@ class Experiment:
     def _evaluate(self, policy: NextItemPolicy, period: Period, reward_models: dict[str, RewardModel] | None = None, **evaluation_overrides) -> PolicyEvaluation:
         reward_models = self.reward_models if reward_models is None else reward_models
         config = self.config.evaluation_config(**evaluation_overrides)
-        return evaluate_policy(policy, self.examples(period), self.log.items, reward_models, config, self.device)
+        evaluation = evaluate_policy(policy, self.examples(period), self.log.items, reward_models, config, self.device)
+        # Distances are measured in the base recommender's embeddings, which do not exist while it is being trained.
+        if self._pretrained_policy_path.exists():
+            evaluation.metrics[f"top_k/{INTRA_LIST_DISTANCE}"] = self._mean_intra_list_distance(evaluation.top_k)
+            evaluation.metrics[f"next_k/{INTRA_LIST_DISTANCE}"] = self._mean_intra_list_distance(evaluation.generated.actions)
+        return evaluation
 
     def _evaluate_lists(self, lists: torch.Tensor) -> ListEvaluation:
         """Test-period evaluation of one given list per test user."""
-        return evaluate_lists(lists, self.examples("test"), self.log.items, self.reward_models, self.config.evaluation_config(), self.device)
+        evaluation = evaluate_lists(lists, self.examples("test"), self.log.items, self.reward_models, self.config.evaluation_config(), self.device)
+        evaluation.metrics[INTRA_LIST_DISTANCE] = self._mean_intra_list_distance(evaluation.lists)
+        return evaluation
+
+    @cached_property
+    def _unit_item_embeddings(self) -> torch.Tensor:
+        """The base recommender's item embeddings scaled to unit length, on the CPU: the space in which lists are called varied. [V+1, d]"""
+        return F.normalize(self.pretrained_policy.item_embedding.weight.detach().float().cpu(), dim=-1)
+
+    def _mean_intra_list_distance(self, lists: torch.Tensor) -> float:
+        return intra_list_distance(lists.cpu(), self._unit_item_embeddings).mean().item()
 
     def _evaluate_ranking(self, ranker: NextItemScorer) -> ListEvaluation:
         """Test-period evaluation of the lists a model produces by ranking the catalogue once, as long as the generated lists."""
@@ -701,11 +1034,14 @@ class Experiment:
             self.reports.table(f"off_policy_training_cap_{importance_weight_cap}", pd.DataFrame(history).set_index("epoch"))
         return load_policy(path, self.device)
 
-    def _best_of_sampled_lists(self, num_lists: int) -> torch.Tensor:
-        """For every test user, the best of `num_lists` lists sampled from the base recommender, as the "train" reward model sees it."""
+    def _best_of_sampled_lists(self, num_lists: int, reward: RewardSpec | None = None) -> torch.Tensor:
+        """For every test user, the best of `num_lists` lists sampled from the base recommender, as the "train" reward model sees it.
+
+        Lists are compared by `reward`, the main run's unless another is given.
+        """
         config = self.config.evaluation_config()
         sampling = replace(config.generation, sample_from_top=self.config.sample_from_top)
-        reward_function = RewardFunction(self.config.rl.reward, self.log.items, self.device)
+        reward_function = RewardFunction(reward or self.config.rl.reward, self.log.items, self.device, item_embeddings=self.pretrained_policy.item_embedding.weight)
 
         def best_list(history):
             return best_of_sampled_lists(
@@ -751,15 +1087,46 @@ class Experiment:
         if run_name not in self._test_evaluations:
             self._test_evaluations[run_name] = self._evaluate(load_policy(self._sweep_checkpoint(run_name), self.device), "test")
         evaluation = self._test_evaluations[run_name]
-        evaluation.metrics.setdefault(REALISED_KL, self._realised_kl(f"sweep_training_{_file_name(run_name)}"))
+        if REALISED_KL not in evaluation.metrics:
+            evaluation.metrics |= self._end_of_training(f"sweep_training_{_file_name(run_name)}")
         return evaluation
 
-    def _realised_kl(self, training_report: str) -> float:
-        """KL from the fine-tuned policy to the base recommender over the last iterations of a recorded run, in nats per generated item."""
+    def _end_of_training(self, training_report: str) -> dict[str, float]:
+        """How a recorded fine-tuning run ended: each of `TRAINING_STATISTICS` averaged over its last iterations.
+
+        The first is the KL from the fine-tuned policy to the base recommender, in nats per generated item.
+        """
         records = pd.read_csv(self.reports.directory / f"{training_report}.csv")
-        if "kl_to_reference" not in records:
-            return float("nan")
-        return float(records["kl_to_reference"].dropna().tail(REALISED_KL_AVERAGING_STEPS).mean())
+        return {
+            statistic: float(records[column].dropna().tail(END_OF_TRAINING_STEPS).mean()) if column in records else float("nan")
+            for statistic, column in TRAINING_STATISTICS.items()
+        }
+
+    def _metrics_on_validation(self, run_name: str) -> dict[str, float]:
+        """All metrics of the base recommender ("pretrained") or of a trained sweep run on validation requests, computed once."""
+        if run_name not in self._validation_metrics:
+            policy = self.pretrained_policy if run_name == "pretrained" else load_policy(self._sweep_checkpoint(run_name), self.device)
+            self._validation_metrics[run_name] = self._evaluate(policy, "validation").metrics
+        return self._validation_metrics[run_name]
+
+    def _selection_on_validation(self, run_names: list[str]) -> pd.DataFrame:
+        """Which of the runs would be chosen without looking at the test period. One row per run evaluated on validation requests.
+
+        The chosen run has the highest reward on validation requests, as the held-out reward model predicts it,
+        among the runs that keep the validation NDCG within `relevance_tolerance` of the base recommender's.
+        """
+        k = max(self.config.ks)
+        relevance, reward = f"next_k/all/ndcg@{k}", "predicted/heldout/played_ratio"
+        evaluated = [name for name in run_names if name in self._validation_metrics]
+        selection = pd.DataFrame({
+            f"validation/{relevance}": {name: self._validation_metrics[name][relevance] for name in evaluated},
+            f"validation/{reward}": {name: self._validation_metrics[name][reward] for name in evaluated},
+        })
+        lowest_relevance = (1.0 - self.config.relevance_tolerance) * selection.loc["pretrained", f"validation/{relevance}"]
+        selection["keeps_relevance"] = selection[f"validation/{relevance}"] >= lowest_relevance
+        best_admissible = selection[f"validation/{reward}"].where(selection["keeps_relevance"]).idxmax()
+        selection["selected"] = selection.index == best_admissible
+        return selection
 
     def _generated_lists_of(self, sweep_runs) -> dict[str, ListEvaluation]:
         """Test evaluation of the lists generated by each named sweep run that was trained, in the given order."""
@@ -767,7 +1134,7 @@ class Experiment:
 
     def _reranked(self, label: str, candidates: ScoredCandidates, reward: RewardSpec) -> dict[str, ListEvaluation]:
         """Test evaluation of the candidates re-ranked by `reward` at every relevance weight, computed once per label."""
-        reward_function = RewardFunction(reward, self.log.items, "cpu")
+        reward_function = RewardFunction(reward, self.log.items, "cpu", item_embeddings=self.pretrained_policy.item_embedding.weight)
         evaluations = {}
         for weight in self.config.rerank_relevance_weights:
             name = f"{label}, weight={weight}"
@@ -781,24 +1148,43 @@ class Experiment:
         """The same candidates with the reward model's prediction replaced by each item's mean played ratio in the train period."""
         candidates = self._scored_test_candidates
         item_mean = torch.as_tensor(self.log.items.mean_played_ratio)[candidates.items]
-        feedback = Feedback(played_ratio=item_mean, session_continues=torch.zeros_like(item_mean), returns=torch.zeros_like(item_mean), is_chosen=torch.ones_like(item_mean))
+        feedback = Feedback(
+            played_ratio=item_mean,
+            session_continues=torch.zeros_like(item_mean),
+            returns=torch.zeros_like(item_mean),
+            is_chosen=torch.ones_like(item_mean),
+            relative_ratio=torch.full_like(item_mean, 0.5),  # every item's mean relative ratio, by construction
+        )
         return ScoredCandidates(candidates.items, candidates.log_probs, feedback, feedback)
 
-    def _trade_off_figures(self, report_name: str, curves: dict[str, dict[str, ListEvaluation]], signals: tuple[str, ...]) -> None:
-        """One figure per signal: relevance and catalogue coverage against that signal as the held-out reward model predicts it.
+    def _trade_off_figures(
+        self, report_name: str, curves: dict[str, dict[str, ListEvaluation]], signals: tuple[str, ...], measures: list[str] | None = None
+    ) -> None:
+        """One figure per signal: `measures` against that signal as the held-out reward model predicts it.
 
         curves: method -> its runs in the order its line is drawn. Methods without runs are left out.
+        measures: metrics of the lists, by default relevance on all and on liked items and catalogue coverage.
         """
         k = max(self.config.ks)
+        measures = measures or [f"all/ndcg@{k}", f"liked/ndcg@{k}", "profile/catalog_coverage"]
         tables = {method: _runs_table(runs) for method, runs in curves.items() if runs}
         for signal in signals:
-            measures = [f"all/ndcg@{k}", f"liked/ndcg@{k}", "profile/catalog_coverage"]
             figure = plots.trade_off(tables, reward_column=f"predicted/heldout/{signal}", measure_columns=measures)
             self.reports.figure(f"{report_name}_by_{signal}", figure)
 
     @property
     def _kl_sweep_runs(self) -> dict[str, RLConfig]:
         return {f"kl={weight}": self.config.rl_config(num_steps=self.config.sweep_steps, reference_kl_weight=weight) for weight in self.config.kl_weights}
+
+    @property
+    def _kl_budget_runs(self) -> dict[str, RLConfig]:
+        """Runs of the main reward whose anchor weight starts at the main run's and adapts to hold each KL budget."""
+        reward, starting_weight = self.config.rl.reward, self.config.rl.reference_kl_weight
+        return {f"kl_budget={budget}": self.config.sweep_run(reward, starting_weight, target_kl=budget) for budget in sorted(self.config.kl_budgets)}
+
+    def _record_stage_time(self, stage: str, seconds: float) -> None:
+        self._stage_seconds[stage] = self._stage_seconds.get(stage, 0.0) + seconds
+        self.reports.table("stage_minutes", pd.Series({name: total / 60 for name, total in self._stage_seconds.items()}, name="minutes"))
 
     def _test_evaluation(self, name: str, policy: NextItemPolicy) -> PolicyEvaluation:
         """Test-period evaluation of a named recommender, computed once per experiment."""
@@ -834,7 +1220,9 @@ class Experiment:
             "predicted/train/played_ratio",
             "predicted/heldout/played_ratio",
             "predicted/heldout/personal_played_ratio",
+            "predicted/heldout/relative_ratio",
             "predicted/heldout/returns",
+            "next_k/logged/played_ratio_per_item",
             "next_k/profile/catalog_coverage",
         ]
         metrics = self._evaluate(policy, "validation").metrics
@@ -850,11 +1238,19 @@ class Experiment:
             f"next_k/skipped/recall@{k}",
             f"next_k/above_usual/ndcg@{k}",
             f"next_k/below_usual/recall@{k}",
-            REALISED_KL,
+            f"next_k/new/ndcg@{k}",
+            f"next_k/repeat/ndcg@{k}",
+            *TRAINING_STATISTICS,
+            "next_k/logged/hits_per_list",
+            "next_k/logged/played_ratio_of_hits",
+            "next_k/logged/relative_ratio_of_hits",
+            "next_k/logged/played_ratio_per_item",
+            "next_k/logged/relative_surplus_per_item",
             "predicted/train/played_ratio",
             "predicted/heldout/played_ratio",
             "predicted/heldout/played_ratio_for_other_user",
             "predicted/heldout/personal_played_ratio",
+            "predicted/heldout/relative_ratio",
             "predicted/heldout/chosen_played_ratio",
             "predicted/heldout/is_chosen",
             "predicted/heldout/played_seconds",
@@ -862,6 +1258,7 @@ class Experiment:
             "predicted/heldout/returns",
             "next_k/profile/catalog_coverage",
             "next_k/profile/mean_user_pair_overlap",
+            f"next_k/{INTRA_LIST_DISTANCE}",
             "next_k/profile/head_item_share",
             "next_k/profile/mean_duration_seconds",
             "next_k/profile/history_repeat_rate",
@@ -877,6 +1274,9 @@ class Experiment:
         for run_name, rl_config in runs.items():
             if self._is_finetuned(run_name, rl_config):
                 evaluations[run_name] = self._sweep_evaluation(run_name)
+        if self.config.evaluate_sweeps_on_validation:
+            on_validation = pd.DataFrame({run_name: self._metrics_on_validation(run_name) for run_name in evaluations})
+            self.reports.table(f"{report_name}_validation", on_validation)
         return self.reports.table(report_name, metrics_table(evaluations))
 
     def _is_finetuned(self, run_name: str, rl_config: RLConfig) -> bool:
@@ -922,7 +1322,7 @@ def _runs_table(runs: dict[str, ListEvaluation]) -> pd.DataFrame:
 def _bind_directory_to_config(home: Path, config: ExperimentConfig) -> None:
     """Records the configuration in `home`, and refuses a directory that holds the results of a different one."""
     home.mkdir(parents=True, exist_ok=True)
-    record = home / "experiment_config.json"
+    record = home / CONFIG_RECORD
     serialized = json.dumps(asdict(config), indent=2, sort_keys=True)
     if record.exists() and json.loads(record.read_text()) != json.loads(serialized):
         raise ValueError(f"{home} holds the results of a different configuration: use another home directory, or delete this one")

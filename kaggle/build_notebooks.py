@@ -132,15 +132,17 @@ torch.set_float32_matmul_precision("high")
 
 IMPORTS = code("""
 import shutil
+from dataclasses import replace
 
 import pandas as pd
 
 from gptrec.baselines.suite import BaselineConfig
 from gptrec.data.datasets import download_raw_data, load_raw_events
 from gptrec.data.preprocess import PreprocessingConfig
-from gptrec.experiment import DEFAULT_REWARDS, Experiment, ExperimentConfig, run_smoke_test
+from gptrec.experiment import DEFAULT_REWARDS, Experiment, ExperimentConfig, reuse_artifacts, run_smoke_test
 from gptrec.models.backbone import TransformerConfig
 from gptrec.rollout import GenerationConfig
+from gptrec.seeds import run_seeds, run_seeds_smoke_test, summarise_seeds
 from gptrec.training.rl import RLConfig
 from gptrec.training.supervised import OptimizationConfig
 
@@ -153,8 +155,8 @@ def show(table):
 """)
 
 CHOOSE_DATASET = code("""
-config = CONFIGS[DATASET]
-HOME = WORKING / DATASET
+config = CONFIGS[(DATASET, SESSION)]
+HOME = WORKING / f"{DATASET}_{SESSION}"
 TIME_BUDGET_HOURS = 11.0
 """)
 
@@ -210,7 +212,14 @@ Relevance is measured on one request per test user, issued at the start of the t
 next $M$ events: all of them, those with $\rho \ge 0.5$ (*liked*) and those with $\rho < 0.5$ (*skipped*). A second
 split compares the played ratio with the mean $\bar\rho(i)$ of the same item in the training period: $\rho \ge \bar\rho(i)$
 (*above usual*) and $\rho < \bar\rho(i)$ (*below usual*); unlike the first, it does not favour items that are easy to
-finish. The metrics are Recall@K, NDCG@K, MAP@K and HitRate@K.
+finish. A third split separates next items that are in the visible history (*repeat*) from those that are not
+(*new*): replaying the history finds the first without any model. The metrics are Recall@K, NDCG@K, MAP@K and
+HitRate@K.
+
+The *logged* statistics need no model at all. A recommended item that is among the user's next events comes with
+the response the log recorded: its played ratio $\rho$, and its relative played ratio $r$ defined in section 3.
+They are reported over those items, and per recommended item with an item the user did not go on to consume
+counting as nothing.
 """),
     code("""
 show(experiment.pretrain_policy())
@@ -220,16 +229,21 @@ show(experiment.pretrain_policy())
 
 A second causal transformer reads, at position $t$, the item $i_t$ together with the quantised played ratio
 $\rho_{t-1}$ of the previous item. Its state $z_t$ depends on $(i_{1:t}, \rho_{1:t-1})$: it has seen the candidate
-item and the history, but not the response to the candidate. Four heads predict that response,
+item and the history, but not the response to the candidate. Five heads predict that response,
 
-$$(\hat\rho_t,\ \hat c_t,\ \hat u_t,\ \hat q_t) = \sigma(W z_t),$$
+$$(\hat\rho_t,\ \hat c_t,\ \hat u_t,\ \hat q_t,\ \hat r_t) = \sigma(W z_t),$$
 
-the played ratio, the session continuation, the return, and the probability that the user chooses the item at
-all. The loss is
+the played ratio, the session continuation, the return, the probability that the user chooses the item at all, and
+the *relative played ratio*. The last is the played ratio as a quantile among the training-period events of the
+same item,
 
-$$\mathcal{L} = \operatorname{BCE}(\hat\rho, \rho) + \lambda_c \operatorname{BCE}(\hat c, c) + \lambda_u \operatorname{BCE}(\hat u, u) + \lambda_q\, \mathcal{L}_q,$$
+$$r = \frac{\#\{\rho' < \rho\} + \tfrac{1}{2}\,\#\{\rho' = \rho\}}{n(i)},$$
 
-with $\rho$ as a soft label and the retention terms taken over observed outcomes only. Logged events contain only
+so its mean is $0.5$ for every item, whatever the item's length. The loss is
+
+$$\mathcal{L} = \operatorname{BCE}(\hat\rho, \rho) + \lambda_c \operatorname{BCE}(\hat c, c) + \lambda_u \operatorname{BCE}(\hat u, u) + \lambda_q\, \mathcal{L}_q + \lambda_r \operatorname{BCE}(\hat r, r),$$
+
+with $\rho$ and $r$ as soft labels and the retention terms taken over observed outcomes only. Logged events contain only
 chosen items, so $\hat q$ is learned by contrast. One event per sequence is scored a second time with its item
 replaced by the item $j$ of another event of the batch, so that replacements follow the empirical item
 distribution $p$:
@@ -240,12 +254,13 @@ $$\mathcal{L}_q = -\tfrac{1}{2}\, \mathbb{E}\big[\log \hat q(i_t \mid h_t)\big] 
 Two copies are trained on disjoint halves of the users. $R_{\text{train}}$ provides the rewards during fine-tuning;
 $R_{\text{held-out}}$ only evaluates the resulting lists.
 
-The table compares the predicted played ratio on test-period events, each predicted from the events before it,
-with three reference predictors: the training mean, the mean of the item, and the mean over the user's preceding
-events.
+The first table compares the predicted played ratio on test-period events, each predicted from the events before
+it, with three reference predictors: the training mean, the mean of the item, and the mean over the user's preceding
+events. The second does the same for the relative played ratio, which no statistic of the item can predict.
 """),
     code("""
 show(experiment.train_reward_models())
+show(pd.read_csv(experiment.reports.directory / "reward_model_relative_ratio.csv", index_col=[0, 1]))
 """),
     markdown(r"""
 **Error structure.** Quality of $\hat\rho$ separately for events the user initiated and events a recommender served;
@@ -347,12 +362,53 @@ The second figure places the same runs by the divergence they ended at,
 $\mathbb{E}\big[\operatorname{KL}(\pi_\theta(\cdot \mid s_k)\,\|\,\pi_0(\cdot \mid s_k))\big]$ in nats per generated item. The
 weight $\beta$ acts relative to the standardised advantages, so its effect depends on the estimator and the data;
 the divergence reached does not.
+
+Every run is also evaluated on validation requests. The last table marks the run that would be chosen without the
+test period: the highest predicted played ratio on validation requests among the runs whose validation NDCG@K stays
+within a tolerance of the base recommender's.
 """),
     code("""
 show(experiment.sweep_kl_weight())
+show(pd.read_csv(experiment.reports.directory / "kl_sweep_selection.csv", index_col=0))
 """),
     markdown(r"""
-## 7. Whose reward is it
+## 7. A KL budget instead of an anchor weight
+
+With a budget $\delta$ the anchor weight is no longer fixed. After every iteration it is multiplied by
+$\exp\big(\eta\,(\operatorname{KL} / \delta - 1)\big)$, so it tightens while the policy is further than $\delta$ nats per
+item from $\pi_0$ and loosens while it is nearer. Runs under the same budget have moved equally far, whatever the
+advantage estimator, the reward or the dataset.
+"""),
+    code("""
+show(experiment.sweep_kl_budget())
+"""),
+    markdown(r"""
+## 8. Advantage estimators
+
+The leave-one-out baseline replaces the value model: $R$ lists are sampled for each history, and
+$A_k^{(m)} = G_k^{(m)} - \frac{1}{R - 1} \sum_{m' \ne m} G_k^{(m')}$. The number of lists per iteration, the learning
+rate and the number of passes over each batch are those of section 6, so only the baseline differs. The runs are
+compared at equal $\beta$ and under equal KL budgets. A last run multiplies the learning rate of the policy and
+reports the share of actions whose probability ratio leaves $[1 - \epsilon, 1 + \epsilon]$.
+"""),
+    code("""
+show(experiment.compare_advantage_estimators())
+"""),
+    markdown(r"""
+## 9. Simulated feedback while fine-tuning
+
+The reward model needs a response to every generated item before it can score the next one. Sections 5 and 6 feed
+it its own expectation $\hat\rho_k$, a value near one half that logged responses rarely take. Here the response is
+sampled, $\rho_k \sim \operatorname{Bernoulli}(\hat\rho_k)$. The second table judges each policy under every assumption:
+the expectation, a sample, and "everything was played".
+"""),
+    code("""
+show(experiment.compare_simulated_feedback())
+if (experiment.reports.directory / "simulated_feedback_cross_judged.csv").exists():
+    show(pd.read_csv(experiment.reports.directory / "simulated_feedback_cross_judged.csv", index_col=0))
+"""),
+    markdown(r"""
+## 10. Whose reward is it
 
 A list $a$ generated for a user with history $h$ can also be shown to another user with history $h'$. The reward
 model then gives two values,
@@ -372,7 +428,7 @@ $\bar\rho(j) + w \log \pi_0(j \mid h)$, where $\bar\rho(j)$ is the mean played r
 show(experiment.explain_reward_gain())
 """),
     markdown(r"""
-## 8. Alternatives to on-policy RL
+## 11. Alternatives to on-policy RL
 
 **Liked-only fine-tuning.** Next-item training restricted to targets the user liked:
 $\mathcal{L}(\theta) = -\sum_{t:\ \rho_{t+1} \ge 0.5} \log \pi_\theta(i_{t+1} \mid i_{1:t})$.
@@ -400,7 +456,7 @@ coverage.
 show(experiment.compare_alternatives_to_rl())
 """),
     markdown(r"""
-## 9. Rewards for continuation and return
+## 12. Rewards for continuation and return
 
 The reward generalises to
 
@@ -424,7 +480,7 @@ coverage against one signal predicted by $R_{\text{held-out}}$, one line per rew
 show(experiment.sweep_rewards())
 """),
     markdown(r"""
-## 10. Relevance inside the reward
+## 13. Relevance inside the reward
 
 **Logged relevance**, $r_k = \mathbb{1}[a_k \in F] / \log_2(k + 1)$, is the term of DCG@K, the NDCG reward of [1]. It is
 run alone with $\beta = 0$, and added to the played ratio,
@@ -438,7 +494,7 @@ on the user's real continuation, the KL penalty protects the whole distribution 
 show(experiment.sweep_relevance_in_reward())
 """),
     markdown(r"""
-## 11. Personal rewards
+## 14. Personal rewards
 
 A reward without a baseline pays the most for items that everybody finishes, whoever receives them. Two rewards pay
 only for what depends on the user:
@@ -455,19 +511,46 @@ are run for several $\beta$. Re-ranking the candidates of $\pi_0$ by the persona
 show(experiment.sweep_personal_rewards())
 """),
     markdown(r"""
-## 12. Credit along the list
+## 15. A length-neutral reward
+
+The played ratio pays for items that are easy to finish, whoever receives them. The reward here is the predicted
+relative played ratio, $r_k = \hat r(a_k \mid h, a_{1:k-1})$, whose mean is $0.5$ for every item: a policy earns it
+only by matching items to the users who take to them more than others do. Re-ranking the candidates of $\pi_0$ by
+$\hat r$ is the reference without RL.
+"""),
+    code("""
+show(experiment.sweep_relative_reward())
+"""),
+    markdown(r"""
+## 16. A reward for the list as a whole
+
+$$r_k = \hat\rho_k + w_D\, \frac{1}{K - 1} \sum_{l < k} \big(1 - \cos(e_{a_k}, e_{a_l})\big),$$
+
+where $e$ are the item embeddings of $\pi_0$. Summed over a list, the second term is $K / 2$ times the mean pairwise
+distance of its items, so what an item earns depends on its neighbours. Scoring items one at a time no longer finds
+the best list. RL is compared with the greedy maximiser of the same reward, which fills the list one position at a
+time from the candidates of $\pi_0$ (maximal marginal relevance), and with the best of several sampled lists.
+"""),
+    code("""
+show(experiment.compare_list_reward())
+if (experiment.reports.directory / "list_reward_methods.csv").exists():
+    show(pd.read_csv(experiment.reports.directory / "list_reward_methods.csv", index_col=[0, 1]))
+"""),
+    markdown(r"""
+## 17. Credit along the list
 
 Two ablations test whether fine-tuning uses the sequential structure of a list. With $\gamma = 0$ the return reduces to
 the reward of the item itself, $G_k = r_k$, so no item is credited with what follows it. With a horizon of one, a
 single item is sampled per episode during fine-tuning, so the policy never learns from a context that contains
-generated items; its lists are still generated item by item at evaluation. Both are compared with the runs of
-section 6 at the same $\beta$.
+generated items; its lists are still generated item by item at evaluation. Both are compared with runs that credit
+every item with the rest of the list, at the same $\beta$ and under the same KL budgets. Changing the credit changes
+what $\beta$ means, so only the budget runs compare policies that moved equally far.
 """),
     code("""
 show(experiment.ablate_sequence_credit())
 """),
     markdown(r"""
-## 13. Multi-step generation
+## 18. Multi-step generation
 
 For each list position $k$: the probability that $a_k \in F$, the entropy of $\pi_\theta(\cdot \mid s_k)$, the
 predicted signals, and the disagreement $|\hat\rho^{\,\text{train}}_k - \hat\rho^{\,\text{held-out}}_k|$ between the two
@@ -485,7 +568,8 @@ show(experiment.analyse_multistep())
 ## Reports
 """),
     code("""
-shutil.make_archive(str(WORKING / f"{DATASET}_reports"), "zip", experiment.reports.directory)
+show(pd.read_csv(experiment.reports.directory / "stage_minutes.csv", index_col=0))
+shutil.make_archive(str(WORKING / f"{DATASET}_{SESSION}_reports"), "zip", experiment.reports.directory)
 sorted(path.name for path in experiment.reports.directory.iterdir())
 """),
     markdown("""
@@ -511,9 +595,10 @@ sorted(path.name for path in experiment.reports.directory.iterdir())
 
 T4_CONFIGS = code("""
 DATASET = "kion"
+SESSION = "t4"
 
 CONFIGS = {
-    "yambda": ExperimentConfig(
+    ("yambda", "t4"): ExperimentConfig(
         preprocessing=PreprocessingConfig(max_items=30_000, min_item_events=20, min_user_events=50, validation_days=7, test_days=7),
         transformer=TransformerConfig(hidden_size=256, num_layers=4, num_heads=4, dropout=0.1, max_positions=128),
         window_stride=64,
@@ -537,7 +622,7 @@ CONFIGS = {
         importance_weight_caps=(0.5,),
         sampled_list_counts=(4,),
     ),
-    "kion": ExperimentConfig(
+    ("kion", "t4"): ExperimentConfig(
         preprocessing=PreprocessingConfig(max_items=20_000, min_item_events=10, min_user_events=5, validation_days=7, test_days=7,
                                           session_gap_seconds=0, return_window_seconds=7 * SECONDS_PER_DAY),
         transformer=TransformerConfig(hidden_size=256, num_layers=4, num_heads=4, dropout=0.2, max_positions=48),
@@ -568,58 +653,131 @@ SMOKE_TEST_USERS = {"yambda": 200, "kion": 30_000}
 """)
 
 OFFLINE_CONFIGS = code("""
-DATASET = "kion"
+DATASET = "yambda"
+SESSION = "final"
+
+YAMBDA = ExperimentConfig(
+    preprocessing=PreprocessingConfig(max_items=50_000, min_item_events=20, min_user_events=50, validation_days=7, test_days=7),
+    transformer=TransformerConfig(hidden_size=256, num_layers=4, num_heads=4, dropout=0.1, max_positions=128),
+    window_stride=32,
+    policy_optimization=OptimizationConfig(epochs=14, batch_size=256, learning_rate=1e-3),
+    reward_model_optimization=OptimizationConfig(epochs=8, batch_size=512, learning_rate=1e-3),
+    baselines=BaselineConfig(optimization=OptimizationConfig(epochs=14, batch_size=256, learning_rate=1e-3)),
+    horizon=10,
+    max_future=20,
+    ks=(1, 5, 10),
+    evaluation_batch_size=1024,
+    rl=RLConfig(num_steps=2000, histories_per_step=512, reference_kl_weight=0.3, learning_rate=1e-5, evaluate_every=250, mixed_precision=True),
+    sweep_steps=1000,
+    kl_weights=(0.0, 0.03, 0.05, 0.1, 0.3),
+    rewards=DEFAULT_REWARDS[3:4],
+    reward_kl_weights=(0.1,),
+    choice_reward_kl_weights=(),
+    logged_relevance_weights=(10.0,),
+    logged_relevance_kl_weights=(0.0,),
+    personal_reward_kl_weights=(0.1,),
+    credit_ablation_kl_weights=(),
+    importance_weight_caps=(0.5,),
+    sampled_list_counts=(8,),
+)
+KION = ExperimentConfig(
+    preprocessing=PreprocessingConfig(max_items=20_000, min_item_events=10, min_user_events=5, validation_days=7, test_days=7,
+                                      session_gap_seconds=0, return_window_seconds=7 * SECONDS_PER_DAY),
+    transformer=TransformerConfig(hidden_size=256, num_layers=4, num_heads=4, dropout=0.2, max_positions=48),
+    window_stride=24,
+    policy_optimization=OptimizationConfig(epochs=30, batch_size=512, learning_rate=1e-3),
+    reward_model_optimization=OptimizationConfig(epochs=15, batch_size=512, learning_rate=1e-3),
+    baselines=BaselineConfig(optimization=OptimizationConfig(epochs=30, batch_size=512, learning_rate=1e-3)),
+    horizon=10,
+    max_future=20,
+    ks=(1, 5, 10),
+    evaluation_batch_size=2048,
+    rl=RLConfig(num_steps=2000, histories_per_step=512, min_history=3, generation=GenerationConfig(block_history_items=True),
+                reference_kl_weight=0.3, learning_rate=1e-5, evaluate_every=250, mixed_precision=True),
+    sweep_steps=1000,
+    kl_weights=(0.0, 0.1, 0.2, 0.3, 0.5, 1.0),
+    rewards=DEFAULT_REWARDS[2:5],
+    reward_kl_weights=(0.1, 0.3),
+    choice_reward_kl_weights=(),
+    logged_relevance_weights=(10.0, 3.0),
+    logged_relevance_kl_weights=(0.0, 0.03, 0.1, 0.3),
+    personal_reward_kl_weights=(0.0, 0.1, 0.3),
+    credit_ablation_kl_weights=(0.1, 0.3),
+    importance_weight_caps=(0.5, 2.0),
+    sampled_list_counts=(8,),
+)
 
 CONFIGS = {
-    "yambda": ExperimentConfig(
-        preprocessing=PreprocessingConfig(max_items=50_000, min_item_events=20, min_user_events=50, validation_days=7, test_days=7),
-        transformer=TransformerConfig(hidden_size=256, num_layers=4, num_heads=4, dropout=0.1, max_positions=128),
-        window_stride=32,
-        policy_optimization=OptimizationConfig(epochs=10, batch_size=256, learning_rate=1e-3),
-        reward_model_optimization=OptimizationConfig(epochs=8, batch_size=512, learning_rate=1e-3),
-        baselines=BaselineConfig(optimization=OptimizationConfig(epochs=10, batch_size=256, learning_rate=1e-3)),
-        horizon=10,
-        max_future=20,
-        ks=(1, 5, 10),
-        evaluation_batch_size=1024,
-        rl=RLConfig(num_steps=2000, histories_per_step=512, reference_kl_weight=0.3, learning_rate=1e-5, evaluate_every=250, mixed_precision=True),
-        sweep_steps=1000,
-        kl_weights=(0.0, 0.01, 0.03, 0.1, 0.3, 1.0),
-        rewards=DEFAULT_REWARDS[3:5],
-        reward_kl_weights=(0.1,),
-        choice_reward_kl_weights=(),
-        logged_relevance_weights=(10.0,),
-        logged_relevance_kl_weights=(0.0, 0.03),
-        personal_reward_kl_weights=(0.0, 0.03),
-        credit_ablation_kl_weights=(0.03,),
+    ("kion", "diagnostics"): replace(
+        KION,
+        kl_weights=(0.0, 0.1, 0.3),
+        rewards=(),
+        logged_relevance_weights=(),
+        personal_reward_kl_weights=(),
+        credit_ablation_kl_weights=(0.3,),
         importance_weight_caps=(0.5,),
-        sampled_list_counts=(8,),
+        kl_budgets=(0.1, 0.5),
+        estimator_kl_weights=(0.1, 0.3),
+        high_learning_rate_factor=10.0,
+        sampled_feedback_kl_weights=(0.1, 0.3),
+        relative_reward_kl_weights=(0.0, 0.1, 0.3),
+        diversity_weights=(1.0,),
+        diversity_kl_weights=(0.1, 0.3),
     ),
-    "kion": ExperimentConfig(
-        preprocessing=PreprocessingConfig(max_items=20_000, min_item_events=10, min_user_events=5, validation_days=7, test_days=7,
-                                          session_gap_seconds=0, return_window_seconds=7 * SECONDS_PER_DAY),
-        transformer=TransformerConfig(hidden_size=256, num_layers=4, num_heads=4, dropout=0.2, max_positions=48),
-        window_stride=24,
-        policy_optimization=OptimizationConfig(epochs=30, batch_size=512, learning_rate=1e-3),
-        reward_model_optimization=OptimizationConfig(epochs=15, batch_size=512, learning_rate=1e-3),
-        baselines=BaselineConfig(optimization=OptimizationConfig(epochs=30, batch_size=512, learning_rate=1e-3)),
-        horizon=10,
-        max_future=20,
-        ks=(1, 5, 10),
-        evaluation_batch_size=2048,
-        rl=RLConfig(num_steps=2000, histories_per_step=512, min_history=3, generation=GenerationConfig(block_history_items=True),
-                    reference_kl_weight=0.3, learning_rate=1e-5, evaluate_every=250, mixed_precision=True),
-        sweep_steps=1000,
-        kl_weights=(0.0, 0.1, 0.2, 0.3, 0.5, 1.0),
-        rewards=DEFAULT_REWARDS[3:5],
-        reward_kl_weights=(0.1, 0.3),
-        choice_reward_kl_weights=(),
-        logged_relevance_weights=(10.0, 3.0),
-        logged_relevance_kl_weights=(0.0, 0.03, 0.1, 0.3),
-        personal_reward_kl_weights=(0.0, 0.1, 0.3),
-        credit_ablation_kl_weights=(0.1, 0.3),
-        importance_weight_caps=(0.5, 2.0),
-        sampled_list_counts=(8,),
+    ("kion", "final"): replace(
+        KION,
+        kl_budgets=(0.1, 0.5),
+        estimator_kl_weights=(0.1, 0.3),
+        high_learning_rate_factor=10.0,
+        sampled_feedback_kl_weights=(0.1, 0.3),
+        relative_reward_kl_weights=(0.0, 0.1, 0.3),
+        diversity_weights=(1.0,),
+        diversity_kl_weights=(0.1, 0.3),
+    ),
+    ("kion", "seeds"): replace(
+        KION,
+        kl_weights=(0.1, 0.3, 0.5, 1.0),
+        rewards=(),
+        logged_relevance_weights=(10.0,),
+        logged_relevance_kl_weights=(0.3,),
+        personal_reward_kl_weights=(),
+        credit_ablation_kl_weights=(),
+        importance_weight_caps=(0.5,),
+        sampled_list_counts=(),
+        kl_budgets=(0.1,),
+        estimator_kl_weights=(0.3,),
+        relative_reward_kl_weights=(0.3,),
+    ),
+    ("yambda", "diagnostics"): replace(
+        YAMBDA,
+        kl_weights=(0.0, 0.03, 0.1),
+        rewards=(),
+        logged_relevance_weights=(),
+        personal_reward_kl_weights=(),
+        kl_budgets=(0.5,),
+        estimator_kl_weights=(0.03, 0.1),
+        relative_reward_kl_weights=(0.03, 0.1),
+    ),
+    ("yambda", "final"): replace(
+        YAMBDA,
+        logged_relevance_kl_weights=(0.0, 0.1),
+        kl_budgets=(0.2, 0.5),
+        estimator_kl_weights=(0.03, 0.1),
+        sampled_feedback_kl_weights=(0.1,),
+        relative_reward_kl_weights=(0.03, 0.1),
+        diversity_weights=(1.0,),
+        diversity_kl_weights=(0.1,),
+    ),
+    ("yambda", "seeds"): replace(
+        YAMBDA,
+        kl_weights=(0.03, 0.1),
+        rewards=(),
+        logged_relevance_weights=(),
+        logged_relevance_kl_weights=(),
+        personal_reward_kl_weights=(),
+        importance_weight_caps=(0.5,),
+        sampled_list_counts=(),
+        kl_budgets=(0.5,),
     ),
 }
 SMOKE_TEST_USERS = {"yambda": 200, "kion": 30_000}
@@ -712,7 +870,10 @@ import torch
 smoke_test_results = {{}}
 for dataset in DATASETS:
     try:
-        run_smoke_test(load_raw_events(dataset, raw_data_paths[dataset]), CONFIGS[dataset], Path("{WORKING}/smoke_test") / dataset, torch.device("cpu"), max_users=SMOKE_TEST_USERS[dataset])
+        smoke_test_events = load_raw_events(dataset, raw_data_paths[dataset])
+        smoke_test_home = Path("{WORKING}/smoke_test") / dataset
+        run_smoke_test(smoke_test_events, CONFIGS[(dataset, "final")], smoke_test_home / "experiment", torch.device("cpu"), max_users=SMOKE_TEST_USERS[dataset])
+        run_seeds_smoke_test(smoke_test_events, CONFIGS[(dataset, "seeds")], smoke_test_home / "seeds", torch.device("cpu"), max_users=SMOKE_TEST_USERS[dataset])
         smoke_test_results[dataset] = "passed"
     except Exception:
         smoke_test_results[dataset] = "FAILED\\n" + traceback.format_exc()
@@ -739,11 +900,7 @@ for dataset, result in smoke_test_results.items():
     ]
 
 
-def train_offline() -> list[dict]:
-    return [
-        ABSTRACT,
-        markdown("## Setup"),
-        code(f"""
+OFFLINE_SETUP = code(f"""
 import importlib.util
 import json
 import os
@@ -766,8 +923,6 @@ for dataset, result in manifest["smoke_tests"].items():
     print(f"smoke test on {{dataset}}:", result.splitlines()[0])
 
 WORKING = Path("{WORKING}")
-SOURCE_DIR = WORKING / "src"
-shutil.copytree(BUNDLE_DIR / "src", SOURCE_DIR, dirs_exist_ok=True)
 os.environ.update(GPTREC_HOME=str(WORKING), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
 sys.path.insert(0, str(SOURCE_DIR))
 
@@ -775,18 +930,128 @@ missing = [package for package in {REQUIRED_PACKAGES} if importlib.util.find_spe
 if missing:
     wheels = BUNDLE_DIR / "wheels"
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "--no-index", f"--find-links={{wheels}}", *missing])
+""")
+
+REUSE_EARLIER_SESSIONS = [
+    markdown("""
+## Earlier sessions
+
+A session named in `EARLIER_SESSIONS` continues an earlier one instead of repeating it: the interaction log, the
+models and the finished fine-tuning runs of the earlier session are copied from its attached output, and only the
+runs it does not have are trained. The earlier session must have had the same configuration in everything but the
+grids of its sweeps. The models listed below are the ones that will not be trained again.
 """),
+    code("""
+EARLIER_SESSIONS = {
+    ("yambda", "final"): "/kaggle/input/datasets/ventihi/yambda-diagnostics/yambda_diagnostics",
+}
+
+earlier_session = EARLIER_SESSIONS.get((DATASET, SESSION))
+if earlier_session is None:
+    print("no earlier session is continued: every model is trained in this one")
+else:
+    reuse_artifacts(earlier_session, HOME, config)
+    reused_models = sorted(str(path.relative_to(HOME / "artifacts")) for path in (HOME / "artifacts").rglob("*.pt"))
+    print(f"continuing {earlier_session}: {len(reused_models)} trained models")
+    print("\\n".join(reused_models))
+"""),
+]
+
+LOAD_BUNDLED_EVENTS = code("""
+raw_events = load_raw_events(DATASET, BUNDLE_DIR / manifest["raw_data"][DATASET])
+print(f"{len(raw_events):,} raw events")
+""")
+
+
+def train_offline() -> list[dict]:
+    return [
+        ABSTRACT,
+        *package_source_cells(f"{WORKING}/src"),
+        markdown("## Setup"),
+        OFFLINE_SETUP,
         CHECK_HARDWARE,
         IMPORTS,
         markdown("## Configuration"),
         OFFLINE_CONFIGS,
         CHOOSE_DATASET,
-        code("""
-raw_events = load_raw_events(DATASET, BUNDLE_DIR / manifest["raw_data"][DATASET])
-print(f"{len(raw_events):,} raw events")
-"""),
+        LOAD_BUNDLED_EVENTS,
         *SMOKE_TEST,
+        *REUSE_EARLIER_SESSIONS,
         *STAGES,
+    ]
+
+
+# Seed 0 is the seed of notebook 3's sessions, so two more seeds give three per dataset. Two Yambda seeds (about
+# 4.7 hours each) are what fits the 12-hour limit.
+SEED_SESSIONS = {
+    "4_seeds_kion_1_2.ipynb": ("kion", (1, 2)),
+    "4_seeds_yambda_1_2.ipynb": ("yambda", (1, 2)),
+}
+
+
+def seeds_offline(dataset: str, seeds: tuple[int, ...]) -> list[dict]:
+    return [
+        ABSTRACT,
+        markdown("""
+This notebook repeats the core of the study under several random seeds. A seed fixes the initial weights of the
+recommender and of the reward models, the order of their training batches, and the lists sampled while fine-tuning;
+the interaction log and the test requests are the same for every seed. Each table gives the mean and the standard
+deviation over the seeds of this session. Seed 0 is the seed of the single-seed sessions of notebook 3, so it is
+not repeated here.
+"""),
+        *package_source_cells(f"{WORKING}/src"),
+        markdown("## Setup"),
+        OFFLINE_SETUP,
+        CHECK_HARDWARE,
+        IMPORTS,
+        markdown("## Configuration"),
+        OFFLINE_CONFIGS,
+        code(f"""
+DATASET = "{dataset}"
+SEEDS = {seeds}
+SESSION = "seeds"
+config = CONFIGS[(DATASET, SESSION)]
+HOME = WORKING / f"{{DATASET}}_seeds_{{'_'.join(map(str, SEEDS))}}"
+TIME_BUDGET_HOURS = 11.0
+"""),
+        LOAD_BUNDLED_EVENTS,
+        markdown("""
+## Smoke test
+
+Two seeds on a subsample of users, with small models and a few optimisation steps.
+"""),
+        code("""
+run_seeds_smoke_test(raw_events, config, WORKING / "smoke_test" / DATASET, device, max_users=SMOKE_TEST_USERS[DATASET])
+shutil.rmtree(WORKING / "smoke_test")
+"""),
+        markdown("""
+## Runs
+
+Per seed: the base recommender, both reward models, the main fine-tuning run, the anchor sweep, a run under a KL
+budget with its leave-one-out and myopic-credit counterparts, the split of the reward gain between the user and
+other users, the alternatives to on-policy RL, and the rewards with a logged-relevance term and with the relative
+played ratio. A stage whose grid is empty for the dataset is skipped.
+"""),
+        code("""
+report_directories = run_seeds(raw_events, config, SEEDS, HOME, device, time_budget_hours=TIME_BUDGET_HOURS)
+del raw_events
+"""),
+        markdown("## Mean and standard deviation over seeds"),
+        code("""
+summaries = summarise_seeds(report_directories, HOME / "over_seeds")
+for report, summary in summaries.items():
+    print(report)
+    show(summary)
+"""),
+        markdown("## Reports"),
+        code("""
+archive = WORKING / f"{HOME.name}_reports"
+shutil.copytree(HOME / "over_seeds", archive / "over_seeds", dirs_exist_ok=True)
+for seed, directory in report_directories.items():
+    shutil.copytree(directory, archive / f"seed_{seed}", dirs_exist_ok=True)
+shutil.make_archive(str(archive), "zip", archive)
+sorted(path.name for path in (archive / "over_seeds").iterdir())
+"""),
     ]
 
 
@@ -794,4 +1059,6 @@ if __name__ == "__main__":
     write_notebook("1_full_pipeline_t4.ipynb", full_pipeline_on_t4())
     write_notebook("2_prepare_offline_bundle.ipynb", prepare_offline_bundle())
     write_notebook("3_train_offline.ipynb", train_offline())
+    for name, (dataset, seeds) in SEED_SESSIONS.items():
+        write_notebook(name, seeds_offline(dataset, seeds))
     print("wrote", sorted(path.name for path in OUTPUT_DIRECTORY.glob("*.ipynb")))

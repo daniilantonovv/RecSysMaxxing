@@ -1,13 +1,14 @@
 """Figures for the experiment reports.
 
 Conventions: one measure per axis (measures with different units get their own panel, never a
-second y-axis), a fixed colour per series across panels, and a legend whenever there is more than
-one series.
+second y-axis), a fixed colour per series across panels, a legend whenever there is more than
+one series, and every reported quantity named in words (see `gptrec.labels`).
 """
 
 from __future__ import annotations
 
 import functools
+import textwrap
 from typing import Callable
 
 import matplotlib.pyplot as plt
@@ -17,6 +18,7 @@ from cycler import cycler
 from matplotlib.figure import Figure
 
 from gptrec.data.log import InteractionLog
+from gptrec.labels import readable
 
 SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
 REFERENCE_COLOR = "#8a8984"  # guides that are not data, e.g. the diagonal of a calibration plot
@@ -44,6 +46,7 @@ STYLE = {
 
 PANEL_WIDTH, PANEL_HEIGHT = 4.4, 3.0
 MAX_POINTS_WITH_MARKERS = 30
+LABEL_WIDTH = 46  # characters of a panel title or axis label before it wraps
 HISTOGRAM_SAMPLE_SIZE = 2_000_000
 
 
@@ -69,6 +72,17 @@ def _panels(num_panels: int, panels_per_row: int = 4):
     return figure, axes[:num_panels]
 
 
+def _label(metric: str) -> str:
+    """The quantity in words, wrapped to the width of a panel."""
+    return textwrap.fill(readable(metric), LABEL_WIDTH)
+
+
+def _minutes(seconds: float) -> str:
+    """A duration in minutes, with a decimal only where whole minutes would not tell short items apart."""
+    minutes = seconds / 60
+    return f"{minutes:.1f}" if minutes < 10 else f"{minutes:.0f}"
+
+
 def _marker(num_points: int) -> str | None:
     return "o" if num_points <= MAX_POINTS_WITH_MARKERS else None
 
@@ -79,7 +93,7 @@ def small_multiples(curves: pd.DataFrame, x_label: str) -> Figure:
     figure, axes = _panels(len(curves.columns))
     for axis, column in zip(axes, curves.columns):
         axis.plot(curves.index, curves[column], marker=_marker(len(curves)))
-        axis.set(title=column, xlabel=x_label)
+        axis.set(title=_label(column), xlabel=x_label)
     return figure
 
 
@@ -90,7 +104,7 @@ def series_per_panel(panels: dict[str, pd.DataFrame], x_label: str) -> Figure:
     for axis, (measure, table) in zip(axes, panels.items()):
         for series in table.columns:
             axis.plot(table.index, table[series], marker=_marker(len(table)), label=series)
-        axis.set(title=measure, xlabel=x_label)
+        axis.set(title=_label(measure), xlabel=x_label)
     handles, labels = axes[0].get_legend_handles_labels()
     figure.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=len(labels))
     return figure
@@ -124,9 +138,10 @@ def feedback_overview(log: InteractionLog) -> Figure:
     figure, (histogram, duration, popularity) = _panels(3)
     histogram.hist(np.asarray(log.played_ratio)[sample], bins=50, color=SERIES_COLORS[0])
     histogram.set(title="played ratio of events", xlabel="played ratio", ylabel="events")
-    duration.bar([str(interval) for interval in by_duration.index], by_duration.to_numpy(), width=0.7, color=SERIES_COLORS[0])
-    duration.set(title="mean played ratio by item duration", xlabel="duration, seconds (deciles)")
-    duration.tick_params(axis="x", labelrotation=60)
+    bins = range(len(by_duration))
+    duration.bar(bins, by_duration.to_numpy(), width=0.7, color=SERIES_COLORS[0])
+    duration.set_xticks(bins, [_minutes(interval.right) for interval in by_duration.index])
+    duration.set(title="mean played ratio by item duration", xlabel="item duration up to, minutes (tenths of the catalogue)")
     popularity.bar(by_popularity.index, by_popularity.to_numpy(), width=0.7, color=SERIES_COLORS[0])
     popularity.set(title="mean played ratio by item popularity", xlabel="popularity decile (9 = most popular)")
     return figure
@@ -150,7 +165,7 @@ def reward_relevance_frontier(metrics: pd.DataFrame, relevance_rows: list[str], 
         for run in runs:
             point = (metrics.loc[reward_rows[last_judge], run], relevance[run])
             axis.annotate(run, point, textcoords="offset points", xytext=(4, 4), fontsize=8, color=SECONDARY_TEXT_COLOR)
-        axis.set(title=relevance_row, xlabel="predicted played ratio of the generated list", ylabel="relevance")
+        axis.set(title=_label(relevance_row), xlabel="predicted played ratio of the generated list")
         axis.legend()
     return figure
 
@@ -167,7 +182,7 @@ def trade_off(curves: dict[str, pd.DataFrame], reward_column: str, measure_colum
         for method, runs in curves.items():
             line_style = "-" if len(runs) > 1 else "none"
             axis.plot(runs[reward_column], runs[measure_column], marker="o", linestyle=line_style, label=method)
-        axis.set(title=measure_column, xlabel=reward_column)
+        axis.set(title=_label(measure_column), xlabel=_label(reward_column))
     handles, labels = axes[0].get_legend_handles_labels()
     figure.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=min(len(labels), 3))
     return figure

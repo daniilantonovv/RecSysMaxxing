@@ -15,6 +15,7 @@ from torch import Tensor
 
 from gptrec.data.batches import HistoryBatch
 from gptrec.data.log import PAD_ITEM, ItemTable
+from gptrec.evaluation.behavior import pairwise_item_distances
 from gptrec.evaluation.relevance import contains
 from gptrec.models.policy import NextItemPolicy
 from gptrec.models.sequence_recommender import MASKED_LOGIT, NextItemScorer
@@ -188,13 +189,19 @@ class RewardSpec:
     """How the response to one recommended item becomes a scalar reward.
 
     reward = P(chosen) * (played_ratio_weight * ratio term
+                          + relative_ratio_weight * relative played ratio
                           + session_continues_weight * P(session continues)
                           + returns_weight * P(user returns))
              + logged_relevance_weight * [the user really consumed the item next] / log2(position in the list + 1)
+             + diversity_weight * distance of the item to the items before it in the list
 
     P(chosen) is left out unless `weigh_by_choice` is set. The first line is predicted by a reward model
     for any item. The second is read from the log and exists only for moments whose future is known:
-    it is the immediate reward of NDCG in Petrov & Macdonald (arXiv:2403.04875).
+    it is the immediate reward of NDCG in Petrov & Macdonald (arXiv:2403.04875). The third depends on the
+    rest of the list, so it is the one term that scoring items one at a time cannot maximise.
+
+    The relative played ratio is the played ratio as a quantile among everyone who consumed the item. Its
+    mean is 0.5 for every item, so no item earns it by being short or easy to finish.
 
     The ratio term is the predicted played ratio minus `ratio_baseline`. Without a baseline a policy earns
     the most by showing everybody the items everybody finishes. With one it earns only what depends on who
@@ -203,6 +210,7 @@ class RewardSpec:
 
     played_ratio_weight: float = 1.0
     ratio_baseline: RatioBaseline = RatioBaseline.NONE
+    relative_ratio_weight: float = 0.0
     session_continues_weight: float = 0.0
     returns_weight: float = 0.0
     # Reward the time spent rather than the fraction played: ratio * (item duration / median duration).
@@ -212,6 +220,9 @@ class RewardSpec:
     # an item nobody like this user ever picked earns whatever those who did pick it gave it.
     weigh_by_choice: bool = False
     logged_relevance_weight: float = 0.0
+    # Cosine distance, in the base recommender's item embeddings, to the items already in the list, summed and divided
+    # by K - 1. Over a list of K items these terms add up to K / 2 times its mean pairwise distance.
+    diversity_weight: float = 0.0
 
     @property
     def needs_logged_future(self) -> bool:
@@ -221,15 +232,23 @@ class RewardSpec:
     def needs_other_user(self) -> bool:
         return RatioBaseline(self.ratio_baseline) is RatioBaseline.OTHER_USER
 
+    @property
+    def depends_on_the_list(self) -> bool:
+        return self.diversity_weight != 0.0
+
 
 class RewardFunction:
     """Computes the reward of `RewardSpec` for lists of items."""
 
-    def __init__(self, spec: RewardSpec, items: ItemTable, device: torch.device | str) -> None:
+    def __init__(self, spec: RewardSpec, items: ItemTable, device: torch.device | str, item_embeddings: Tensor | None = None) -> None:
+        """item_embeddings: [V+1, d], the space in which the distance between two items is measured; needed only for the diversity term."""
         self.spec = spec
         duration = torch.as_tensor(items.duration_seconds, dtype=torch.float32, device=device)
         self._relative_duration = duration / duration[1:].median().clamp_min(1e-6)
         self._item_mean_played_ratio = torch.as_tensor(items.mean_played_ratio, dtype=torch.float32, device=device)
+        if spec.depends_on_the_list and item_embeddings is None:
+            raise ValueError("this reward has a diversity term, which needs item embeddings to measure distances in")
+        self.unit_item_embeddings = None if item_embeddings is None else F.normalize(item_embeddings.detach().float().to(device), dim=-1)
 
     def __call__(self, feedback: Feedback, lists: Tensor, future_items: Tensor | None = None, feedback_for_other_user: Feedback | None = None) -> Tensor:
         """Reward of every item of every list. [B, K]
@@ -239,11 +258,23 @@ class RewardFunction:
         future_items: long [B, M], what each user really consumed next; needed only for logged relevance.
         feedback_for_other_user: the predicted response of another user to the same lists; needed only for that baseline.
         """
+        reward = self.item_reward(feedback, lists, future_items, feedback_for_other_user)
+        if self.spec.depends_on_the_list:
+            reward = reward + self.spec.diversity_weight * distance_to_earlier_items(lists, self.unit_item_embeddings)
+        return reward
+
+    def item_reward(self, feedback: Feedback, lists: Tensor, future_items: Tensor | None = None, feedback_for_other_user: Feedback | None = None) -> Tensor:
+        """The part of the reward an item earns whatever else is in its list. Arguments and shape as in `__call__`."""
         spec = self.spec
         ratio_term = feedback.played_ratio - self._ratio_baseline(lists, feedback_for_other_user)
         if spec.weigh_ratio_by_duration:
             ratio_term = ratio_term * self._relative_duration[lists]
-        reward = spec.played_ratio_weight * ratio_term + spec.session_continues_weight * feedback.session_continues + spec.returns_weight * feedback.returns
+        reward = (
+            spec.played_ratio_weight * ratio_term
+            + spec.relative_ratio_weight * feedback.relative_ratio
+            + spec.session_continues_weight * feedback.session_continues
+            + spec.returns_weight * feedback.returns
+        )
         if spec.weigh_by_choice:
             reward = reward * feedback.is_chosen
         if spec.needs_logged_future:
@@ -269,7 +300,19 @@ def discounted_logged_relevance(lists: Tensor, future_items: Tensor) -> Tensor:
     return contains(lists, future_items).float() / torch.log2(position + 1.0)
 
 
+def distance_to_earlier_items(lists: Tensor, unit_item_embeddings: Tensor) -> Tensor:
+    """For each listed item, its cosine distance to the items before it in the list, summed and divided by K - 1. [B, K]
+
+    The first item earns nothing. Over a list the terms add up to K / 2 times its mean pairwise distance, so
+    what an item earns depends on its neighbours: this is a reward for the list as a whole.
+    """
+    list_length = lists.shape[1]
+    comes_earlier = torch.ones(list_length, list_length, dtype=torch.bool, device=lists.device).tril(diagonal=-1)
+    return (pairwise_item_distances(lists, unit_item_embeddings) * comes_earlier).sum(dim=2) / max(1, list_length - 1)
+
+
 MAX_SEQUENCES_PER_PASS = 4096  # bounds the memory of scoring many candidate items or lists per user
+USERS_PER_GREEDY_PASS = 1024  # bounds the memory of comparing every candidate of a user with the items already picked
 
 
 @dataclass
@@ -309,11 +352,39 @@ def score_candidates(scorer: NextItemScorer, reward_model: RewardModel, history:
 def rerank(candidates: ScoredCandidates, reward_function: RewardFunction, list_length: int, relevance_weight: float) -> Tensor:
     """The greedy alternative to RL: the `list_length` candidates with the highest `predicted reward + relevance_weight * log-probability`.
 
-    Weight 0 ranks by reward alone; a large weight returns the recommender's own top list. long [U, list_length], best first.
+    Weight 0 ranks by reward alone; a large weight returns the recommender's own top list. A reward that depends
+    on the list is maximised one position at a time, see `pick_greedily`. long [U, list_length], best first.
     """
-    reward = reward_function(candidates.feedback, candidates.items, feedback_for_other_user=candidates.feedback_for_other_user)
+    reward = reward_function.item_reward(candidates.feedback, candidates.items, feedback_for_other_user=candidates.feedback_for_other_user)
     score = reward + relevance_weight * candidates.log_probs
-    return candidates.items.gather(1, score.topk(list_length, dim=-1).indices)
+    if not reward_function.spec.depends_on_the_list:
+        return candidates.items.gather(1, score.topk(list_length, dim=-1).indices)
+    return pick_greedily(candidates.items, score, reward_function.unit_item_embeddings, reward_function.spec.diversity_weight, list_length)
+
+
+def pick_greedily(items: Tensor, scores: Tensor, unit_item_embeddings: Tensor, diversity_weight: float, list_length: int) -> Tensor:
+    """Maximal marginal relevance: fills a list one position at a time with the best candidate given the items already picked.
+
+    A candidate is worth its score plus `diversity_weight` times what `distance_to_earlier_items` would pay it
+    at that position. This is the greedy maximiser of the list reward RL is trained on, and needs no training.
+    items: long [U, N] candidates; scores: float [U, N] -> long [U, list_length]
+    """
+    picked_lists = []
+    for first_user in range(0, len(items), USERS_PER_GREEDY_PASS):
+        users = slice(first_user, first_user + USERS_PER_GREEDY_PASS)
+        candidates, remaining_scores = items[users], scores[users].clone()
+        embedded = unit_item_embeddings[candidates]
+        user_index = torch.arange(len(candidates), device=candidates.device)
+        similarity_to_picked = torch.zeros_like(remaining_scores)
+        picked = []
+        for position in range(list_length):
+            distance_to_picked = (position - similarity_to_picked) / max(1, list_length - 1)
+            best = (remaining_scores + diversity_weight * distance_to_picked).argmax(dim=1)
+            picked.append(candidates[user_index, best])
+            similarity_to_picked = similarity_to_picked + (embedded @ embedded[user_index, best][:, :, None]).squeeze(2).float()
+            remaining_scores[user_index, best] = MASKED_LOGIT
+        picked_lists.append(torch.stack(picked, dim=1))
+    return torch.cat(picked_lists)
 
 
 @torch.no_grad()

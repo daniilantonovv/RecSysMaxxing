@@ -16,6 +16,7 @@ relevance / reward trade-off.
 from __future__ import annotations
 
 import copy
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable
@@ -48,6 +49,8 @@ from gptrec.training.precision import autocast, clipped_optimizer_step, gradient
 Metrics = dict[str, float]
 
 PROGRESS_REFRESH_SECONDS = 5.0  # keeps the logs of long unattended runs short
+ANCHOR_WEIGHT_RANGE = (1e-4, 1e3)  # an adaptive anchor weight stays inside it
+MAX_RELATIVE_KL_EXCESS = 5.0  # a KL further above its budget than this many times the budget tightens the anchor no faster
 
 
 class AdvantageEstimator(str, Enum):
@@ -79,6 +82,11 @@ class RLConfig:
     # Penalty on KL(policy || pre-trained policy), per generated item. It is the only thing holding the policy near
     # the data: with REINFORCE on Yambda the policy collapsed at 0.1 and held at 0.3.
     reference_kl_weight: float = 0.3
+    # A KL budget, in nats per generated item. When set, the anchor weight is no longer fixed: it starts at
+    # `reference_kl_weight` and is tightened or loosened after every iteration until the policy sits this far from
+    # the pre-trained one. A weight means different things under different estimators, rewards and datasets; a budget does not.
+    target_kl: float | None = None
+    anchor_adaptation_rate: float = 0.03  # relative change of the weight per iteration when the KL is off its budget by the budget itself
     entropy_weight: float = 0.0
 
     learning_rate: float = 1e-5
@@ -108,12 +116,13 @@ def finetune_with_rl(
     # Dropout stays off: the log-probabilities recorded while sampling must equal those recomputed for the update.
     policy = copy.deepcopy(reference).eval().requires_grad_(True)
     reward_model = reward_model.to(device).eval()
-    reward_function = RewardFunction(config.reward, log.items, device)
+    reward_function = RewardFunction(config.reward, log.items, device, item_embeddings=reference.item_embedding.weight)
     moments = TrainingHistorySampler(log, config.history_len, config.max_future, config.min_history, seed=config.seed)
     optimizer = torch.optim.AdamW(policy.parameters(), lr=config.learning_rate, weight_decay=0.0)
     scaler = gradient_scaler(device, config.mixed_precision)
     uses_critic = config.advantage_estimator is AdvantageEstimator.GAE
     critic = _Critic(reference, config, device) if uses_critic else None
+    anchor = _AnchorWeight(config)
     sampling_statistics = _SamplingStatistics(log, device)
 
     def validation_metrics() -> Metrics:
@@ -150,11 +159,13 @@ def finetune_with_rl(
             if policy_is_learning:
                 with autocast(device, config.mixed_precision):
                     log_distributions = action_log_distributions(policy, history, generated.actions, config.generation)
-                    loss, loss_terms = policy_improvement_loss(log_distributions, reference_log_distributions, generated, advantages, config)
+                    loss, loss_terms = policy_improvement_loss(log_distributions, reference_log_distributions, generated, advantages, config, anchor.weight)
                 gradient_norm = clipped_optimizer_step(loss, optimizer, scaler, policy.parameters(), config.max_grad_norm)
-                record |= loss_terms | {"gradient_norm": gradient_norm.item()}
+                record |= loss_terms | {"gradient_norm": gradient_norm.item(), "reference_kl_weight": anchor.weight}
             if critic is not None:
                 record |= critic.learn(history, generated.actions, returns)
+        if policy_is_learning:
+            anchor.adapt(record["kl_to_reference"])
 
         if step % config.evaluate_every == 0 or step == config.num_steps:
             record |= validation_metrics()
@@ -213,10 +224,12 @@ def policy_improvement_loss(
     generated: GeneratedActions,
     advantages: Tensor,
     config: RLConfig,
+    reference_kl_weight: float,
 ) -> tuple[Tensor, Metrics]:
     """PPO's clipped surrogate, plus the KL penalty towards the reference policy and the entropy bonus.
 
-    log_distributions, reference_log_distributions: [B, K, V+1]; advantages: [B, K].
+    log_distributions, reference_log_distributions: [B, K, V+1]; advantages: [B, K]. The weight of the KL
+    penalty is passed separately from `config` because a KL budget changes it between iterations.
     """
     action_log_probs = log_distributions.gather(2, generated.actions[:, :, None]).squeeze(2)
     probability_ratio = (action_log_probs - generated.log_probs).exp()
@@ -227,7 +240,7 @@ def policy_improvement_loss(
     kl_to_reference = (probabilities * (log_distributions - reference_log_distributions)).sum(dim=-1).mean()
     entropy = -(probabilities * log_distributions).sum(dim=-1).mean()
 
-    loss = -surrogate + config.reference_kl_weight * kl_to_reference - config.entropy_weight * entropy
+    loss = -surrogate + reference_kl_weight * kl_to_reference - config.entropy_weight * entropy
     was_clipped = (probability_ratio - 1.0).abs() > config.ppo_clip
     return loss, {
         "loss": loss.item(),
@@ -235,6 +248,27 @@ def policy_improvement_loss(
         "entropy": entropy.item(),
         "clip_fraction": was_clipped.float().mean().item(),
     }
+
+
+class _AnchorWeight:
+    """The weight of the KL penalty towards the pre-trained policy: fixed, or adapted to keep the KL at a budget."""
+
+    def __init__(self, config: RLConfig) -> None:
+        self.weight = config.reference_kl_weight
+        self._target_kl = config.target_kl
+        self._adaptation_rate = config.anchor_adaptation_rate
+
+    def adapt(self, kl_to_reference: float) -> None:
+        """Tightens the anchor when the policy is further from the reference than the budget allows, loosens it when nearer.
+
+        The change is multiplicative and proportional to how far off the KL is, relative to the budget. Without a
+        budget the weight never changes.
+        """
+        if self._target_kl is None:
+            return
+        lowest, highest = ANCHOR_WEIGHT_RANGE
+        relative_excess = min(kl_to_reference / self._target_kl - 1.0, MAX_RELATIVE_KL_EXCESS)
+        self.weight = min(highest, max(lowest, self.weight * math.exp(self._adaptation_rate * relative_excess)))
 
 
 class _Critic:

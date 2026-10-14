@@ -24,17 +24,20 @@ class HeldoutFeedback:
 
     item: np.ndarray  # item token
     played_ratio: np.ndarray
+    relative_ratio: np.ndarray  # the played ratio as a quantile among the item's train-period events
     session_continues: np.ndarray
     returns: np.ndarray
     session_continues_known: np.ndarray  # False where the observed data ends too soon to tell
     returns_known: np.ndarray
     is_organic: np.ndarray  # the user picked the item themselves (it was not recommended)
     predicted_played_ratio: np.ndarray
+    predicted_relative_ratio: np.ndarray
     predicted_session_continues: np.ndarray
     predicted_returns: np.ndarray
     predicted_is_chosen: np.ndarray  # for the item the user chose
     predicted_is_chosen_if_swapped: np.ndarray  # for another item put in its place; NaN for events that were not probed
     recent_played_ratio: np.ndarray  # mean played ratio over the user's preceding events in the window; NaN if none
+    recent_relative_ratio: np.ndarray  # the same mean of the relative ratio
 
 
 @torch.no_grad()
@@ -53,17 +56,20 @@ def predict_heldout_feedback(reward_model: RewardModel, windows: EventWindows, b
         per_event = {
             "item": batch.items,
             "played_ratio": batch.played_ratio,
+            "relative_ratio": batch.relative_ratio,
             "session_continues": batch.session_continues,
             "returns": batch.returns,
             "session_continues_known": batch.session_continues_known,
             "returns_known": batch.returns_known,
             "is_organic": batch.is_organic,
             "predicted_played_ratio": predicted.played_ratio,
+            "predicted_relative_ratio": predicted.relative_ratio,
             "predicted_session_continues": predicted.session_continues,
             "predicted_returns": predicted.returns,
             "predicted_is_chosen": predicted.is_chosen,
             "predicted_is_chosen_if_swapped": is_chosen_if_swapped,
-            "recent_played_ratio": _mean_of_preceding(batch),
+            "recent_played_ratio": _mean_of_preceding(batch.played_ratio),
+            "recent_relative_ratio": _mean_of_preceding(batch.relative_ratio),
         }
         for name, values in per_event.items():
             collected[name].append(values[batch.is_target].cpu().numpy())
@@ -78,10 +84,10 @@ def _is_chosen_if_swapped(reward_model: RewardModel, batch: EventBatch) -> torch
     return torch.full_like(batch.played_ratio, float("nan")).scatter(1, swapped.position[:, None], predicted.to(batch.played_ratio.dtype))
 
 
-def _mean_of_preceding(batch: EventBatch) -> torch.Tensor:
-    """Mean played ratio of the events before each position of its window. NaN at the first position. [B, L]"""
-    num_preceding = torch.arange(batch.played_ratio.shape[1], device=batch.played_ratio.device)
-    sum_of_preceding = batch.played_ratio.cumsum(dim=1) - batch.played_ratio
+def _mean_of_preceding(values: torch.Tensor) -> torch.Tensor:
+    """Mean of the values before each position of its window. NaN at the first position. [B, L] -> [B, L]"""
+    num_preceding = torch.arange(values.shape[1], device=values.device)
+    sum_of_preceding = values.cumsum(dim=1) - values
     return sum_of_preceding / num_preceding
 
 
@@ -95,6 +101,21 @@ def reward_model_report(heldout: HeldoutFeedback, items: ItemTable) -> pd.DataFr
         "user recent mean": np.nan_to_num(heldout.recent_played_ratio, nan=train_mean),
     }
     return pd.DataFrame({name: prediction_quality(heldout.played_ratio, predicted) for name, predicted in predictors.items()}).T
+
+
+def relative_ratio_report(heldout: HeldoutFeedback) -> pd.DataFrame:
+    """Prediction quality of the relative played ratio next to predictors that know nothing about the item.
+
+    `auc` is for the event "the user played more of the item than people usually do". No item statistic can
+    predict it, because every item's mean relative ratio is 0.5 by construction.
+    """
+    usual_for_the_item = 0.5
+    predictors = {
+        "reward model": heldout.predicted_relative_ratio,
+        "usual for the item": np.full_like(heldout.relative_ratio, usual_for_the_item),
+        "user recent mean": np.nan_to_num(heldout.recent_relative_ratio, nan=usual_for_the_item),
+    }
+    return pd.DataFrame({name: prediction_quality(heldout.relative_ratio, predicted) for name, predicted in predictors.items()}).T
 
 
 def quality_by_origin(heldout: HeldoutFeedback) -> pd.DataFrame:

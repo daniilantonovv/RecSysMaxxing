@@ -54,8 +54,9 @@ def finetune_on_logged_returns(
 
     The validation loss, which picks the best epoch, is the plain next-item loss.
     """
-    if config.reward.weigh_by_choice or config.reward.needs_logged_future or config.reward.needs_other_user:
-        raise ValueError("a reward read from the log cannot weigh by choice, by logged relevance or against another user: it has one logged response per item")
+    reward = config.reward
+    if reward.weigh_by_choice or reward.needs_logged_future or reward.needs_other_user or reward.depends_on_the_list:
+        raise ValueError("a reward read from the log has one logged response per item: it cannot weigh by choice, by logged relevance, against another user or by the rest of a list")
     seed_everything(config.optimization.seed)
     behaviour_policy = pretrained_policy.to(device).eval().requires_grad_(False)
     policy = copy.deepcopy(behaviour_policy).requires_grad_(True)
@@ -92,6 +93,7 @@ def _logged_rewards(batch: EventBatch, reward_function: RewardFunction) -> Tenso
         session_continues=batch.session_continues * batch.session_continues_known,
         returns=batch.returns * batch.returns_known,
         is_chosen=torch.ones_like(batch.played_ratio),
+        relative_ratio=batch.relative_ratio,
     )
     return reward_function(logged, batch.items)
 

@@ -23,6 +23,7 @@ class Feedback(TensorGroup):
     session_continues: Tensor  # the user went on to consume another item in the same session
     returns: Tensor  # the user came back for another session within the return window
     is_chosen: Tensor  # the user took the item up at all: true of every logged event, so only a prediction can be below 1
+    relative_ratio: Tensor  # the played ratio as a quantile among everyone who consumed the item: above 0.5 is more than usual
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,8 @@ class RewardModel(nn.Module):
     Three heads describe the response to an item the user consumed: how much of it, whether the session
     went on, whether the user came back. Logged events are all items somebody chose, so those heads say
     nothing about an item this user would never pick. The fourth head does: it tells the item the user
-    chose from another item put in its place.
+    chose from another item put in its place. The fifth predicts the played ratio relative to what is usual
+    for the item, a response that no item earns just by being short or easy to finish.
     """
 
     def __init__(self, config: RewardModelConfig) -> None:
@@ -61,16 +63,17 @@ class RewardModel(nn.Module):
         self.previous_ratio_embedding = nn.Embedding(config.num_ratio_buckets + 1, hidden_size)
         nn.init.normal_(self.previous_ratio_embedding.weight, std=EMBEDDING_INIT_STD)
         self.backbone = CausalTransformer(config.transformer)
-        self.feedback_heads = nn.Linear(hidden_size, 4)
+        self.feedback_heads = nn.Linear(hidden_size, 5)
 
     def forward(self, items: Tensor, played_ratio: Tensor) -> Feedback:
-        """Feedback logits for every position. items: long [B, L], played_ratio: float [B, L] -> four [B, L] tensors.
+        """Feedback logits for every position. items: long [B, L], played_ratio: float [B, L] -> five [B, L] tensors.
 
         played_ratio[:, t] is read only by positions after t, so the last column may hold anything.
         """
         token_embeddings = self.item_embedding(items) + self.previous_ratio_embedding(self._previous_ratio_bucket(played_ratio))
-        played_ratio_logits, session_continues, returns, is_chosen = self.feedback_heads(self.backbone(token_embeddings)).float().unbind(dim=-1)
-        return Feedback(played_ratio_logits, session_continues, returns, is_chosen)
+        logits = self.feedback_heads(self.backbone(token_embeddings)).float()
+        played_ratio_logits, session_continues, returns, is_chosen, relative_ratio = logits.unbind(dim=-1)
+        return Feedback(played_ratio_logits, session_continues, returns, is_chosen, relative_ratio)
 
     def predict(self, items: Tensor, played_ratio: Tensor) -> Feedback:
         """Expected feedback in [0, 1] for every position."""

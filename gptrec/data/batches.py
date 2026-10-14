@@ -40,6 +40,8 @@ class EvalExamples(TensorGroup):
     history: HistoryBatch
     future_items: Tensor  # long [U, M], the user's next events in order; PAD_ITEM where there are fewer than M
     future_played_ratio: Tensor  # float [U, M]
+    future_relative_ratio: Tensor  # float [U, M], the played ratio as a quantile among the item's train-period events
+    future_is_organic: Tensor  # bool [U, M], the user picked the item themselves (it was not recommended)
     user: Tensor  # long [U], user index in the interaction log
 
     def batches(self, batch_size: int) -> Iterator[EvalExamples]:
@@ -53,6 +55,7 @@ class EventBatch(TensorGroup):
 
     items: Tensor  # long [B, L]
     played_ratio: Tensor  # float [B, L]
+    relative_ratio: Tensor  # float [B, L], the played ratio as a quantile among the item's train-period events
     session_continues: Tensor  # float [B, L]
     returns: Tensor  # float [B, L]
     session_continues_known: Tensor  # bool [B, L], False where the observed data ends too soon to tell
@@ -110,6 +113,8 @@ def _examples(log: InteractionLog, users: np.ndarray, future_starts: np.ndarray,
         history=_history_batch(log, future_starts, user_starts, history_len),
         future_items=torch.from_numpy(gather_right_padded(log.item, future_starts, future_ends, max_future, PAD_ITEM)).long(),
         future_played_ratio=torch.from_numpy(gather_right_padded(log.played_ratio, future_starts, future_ends, max_future, 0.0)).float(),
+        future_relative_ratio=torch.from_numpy(gather_right_padded(log.relative_ratio, future_starts, future_ends, max_future, 0.0)).float(),
+        future_is_organic=torch.from_numpy(gather_right_padded(log.is_organic, future_starts, future_ends, max_future, True)),
         user=torch.from_numpy(users).long(),
     )
 
@@ -213,6 +218,7 @@ class EventWindows:
         return EventBatch(
             items=gather(self._log.item, PAD_ITEM).long(),
             played_ratio=gather(self._log.played_ratio, 0.0).float(),
+            relative_ratio=gather(self._log.relative_ratio, 0.0).float(),
             session_continues=gather(self._log.session_continues, False).float(),
             returns=gather(self._log.returns, False).float(),
             session_continues_known=gather(self._log.session_continues_known, False),

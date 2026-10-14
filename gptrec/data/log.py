@@ -63,6 +63,7 @@ class InteractionLog:
 
     item: np.ndarray  # int32 [E], item tokens in 1..V
     played_ratio: np.ndarray  # float32 [E], fraction of the item consumed, in [0, 1]
+    relative_ratio: np.ndarray  # float32 [E], the played ratio as a quantile among the item's train-period events: 0.5 is usual for the item
     session_continues: np.ndarray  # bool [E], the user's next event followed within the session gap
     returns: np.ndarray  # bool [E], the user started another session within the return window
     session_continues_known: np.ndarray  # bool [E], False where the observed data ends before the session gap has passed
@@ -120,6 +121,7 @@ class InteractionLog:
 _EVENT_ARRAYS = (
     "item",
     "played_ratio",
+    "relative_ratio",
     "session_continues",
     "returns",
     "session_continues_known",
