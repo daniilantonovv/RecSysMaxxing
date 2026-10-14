@@ -1,0 +1,23 @@
+#table(
+  columns: (1fr, auto, auto, auto, auto, auto, auto),
+  align: (left, right, right, right, right, right, right),
+  stroke: none,
+  inset: (x: 4pt, y: 2.8pt),
+  table.hline(stroke: 0.8pt),
+  table.header(
+    [], table.cell(colspan: 3, align: center, strong[]), table.cell(colspan: 3, align: center, strong[Held-out share when earlier items are]),
+    table.hline(start: 4, end: 7, stroke: 0.4pt),
+    [], strong[KL], strong[NDCG\@10], strong[Coverage], strong[expected], strong[sampled], strong[finished],
+  ),
+  table.hline(stroke: 0.4pt),
+  table.cell(colspan: 7, align: left, emph[KION]),
+  [Expected feedback, β = 0.3], [0.080], [0.1043], [0.436], [0.553], [0.617], [0.695],
+  [Sampled feedback, β = 0.3], [0.087], [0.1033], [0.442], [0.554], [0.627], [0.706],
+  [Expected feedback, β = 0.1], [0.590], [0.0714], [0.287], [0.655], [0.716], [0.768],
+  [Sampled feedback, β = 0.1], [0.475], [0.0730], [0.287], [0.645], [0.717], [0.773],
+  table.hline(stroke: 0.4pt),
+  table.cell(colspan: 7, align: left, emph[Yambda]),
+  [Expected feedback, β = 0.1], [0.102], [0.1158], [0.479], [0.617], [0.728], [0.873],
+  [Sampled feedback, β = 0.1], [0.076], [0.1178], [0.489], [0.614], [0.728], [0.871],
+  table.hline(stroke: 0.8pt),
+)

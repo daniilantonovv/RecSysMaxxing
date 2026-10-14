@@ -1,0 +1,278 @@
+{
+  "baselines": {
+    "bert4rec_mask_probability": 0.2,
+    "markov_chain_successors": 200,
+    "optimization": {
+      "batch_size": 512,
+      "early_stopping_patience": 2,
+      "epochs": 30,
+      "learning_rate": 0.001,
+      "max_grad_norm": 1.0,
+      "mixed_precision": true,
+      "seed": 0,
+      "warmup_steps": 500,
+      "weight_decay": 0.01
+    },
+    "sasrec_negatives": 1
+  },
+  "choice_reward_kl_weights": [],
+  "credit_ablation_kl_weights": [
+    0.1,
+    0.3
+  ],
+  "diversity_kl_weights": [
+    0.1,
+    0.3
+  ],
+  "diversity_weights": [
+    1.0
+  ],
+  "estimator_kl_weights": [
+    0.1,
+    0.3
+  ],
+  "evaluate_sweeps_on_validation": true,
+  "evaluation_batch_size": 2048,
+  "high_learning_rate_factor": 10.0,
+  "horizon": 10,
+  "importance_weight_caps": [
+    0.5,
+    2.0
+  ],
+  "kl_budgets": [
+    0.1,
+    0.5
+  ],
+  "kl_weights": [
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.5,
+    1.0
+  ],
+  "ks": [
+    1,
+    5,
+    10
+  ],
+  "leave_one_out_rollouts": 4,
+  "liked_finetuning": {
+    "batch_size": 128,
+    "early_stopping_patience": 2,
+    "epochs": 1,
+    "learning_rate": 0.0001,
+    "max_grad_norm": 1.0,
+    "mixed_precision": true,
+    "seed": 0,
+    "warmup_steps": 500,
+    "weight_decay": 0.01
+  },
+  "logged_relevance_kl_weights": [
+    0.0,
+    0.03,
+    0.1,
+    0.3
+  ],
+  "logged_relevance_weights": [
+    10.0,
+    3.0
+  ],
+  "logged_returns": {
+    "discount": 0.9,
+    "importance_weight_cap": 0.5,
+    "importance_weight_factors": 10,
+    "optimization": {
+      "batch_size": 128,
+      "early_stopping_patience": 2,
+      "epochs": 1,
+      "learning_rate": 0.0001,
+      "max_grad_norm": 1.0,
+      "mixed_precision": true,
+      "seed": 0,
+      "warmup_steps": 500,
+      "weight_decay": 0.01
+    },
+    "reward": {
+      "diversity_weight": 0.0,
+      "logged_relevance_weight": 0.0,
+      "played_ratio_weight": 1.0,
+      "ratio_baseline": "none",
+      "relative_ratio_weight": 0.0,
+      "returns_weight": 0.0,
+      "session_continues_weight": 0.0,
+      "weigh_by_choice": false,
+      "weigh_ratio_by_duration": false
+    }
+  },
+  "max_future": 20,
+  "max_users": null,
+  "personal_reward_kl_weights": [
+    0.0,
+    0.1,
+    0.3
+  ],
+  "policy_optimization": {
+    "batch_size": 512,
+    "early_stopping_patience": 2,
+    "epochs": 30,
+    "learning_rate": 0.001,
+    "max_grad_norm": 1.0,
+    "mixed_precision": true,
+    "seed": 0,
+    "warmup_steps": 500,
+    "weight_decay": 0.01
+  },
+  "preprocessing": {
+    "max_items": 20000,
+    "min_item_events": 10,
+    "min_user_events": 5,
+    "return_window_seconds": 604800,
+    "session_gap_seconds": 0,
+    "test_days": 7,
+    "validation_days": 7
+  },
+  "relative_reward_kl_weights": [
+    0.0,
+    0.1,
+    0.3
+  ],
+  "relevance_tolerance": 0.05,
+  "rerank_candidates": 100,
+  "rerank_relevance_weights": [
+    0.0,
+    0.01,
+    0.03,
+    0.1,
+    0.3,
+    1.0
+  ],
+  "reward_kl_weights": [
+    0.1,
+    0.3
+  ],
+  "reward_model_loss": {
+    "is_chosen": 0.25,
+    "played_ratio": 1.0,
+    "relative_ratio": 0.5,
+    "returns": 0.25,
+    "session_continues": 0.25
+  },
+  "reward_model_optimization": {
+    "batch_size": 512,
+    "early_stopping_patience": 2,
+    "epochs": 15,
+    "learning_rate": 0.001,
+    "max_grad_norm": 1.0,
+    "mixed_precision": true,
+    "seed": 0,
+    "warmup_steps": 500,
+    "weight_decay": 0.01
+  },
+  "rewards": [
+    [
+      "session",
+      {
+        "diversity_weight": 0.0,
+        "logged_relevance_weight": 0.0,
+        "played_ratio_weight": 0.0,
+        "ratio_baseline": "none",
+        "relative_ratio_weight": 0.0,
+        "returns_weight": 0.0,
+        "session_continues_weight": 1.0,
+        "weigh_by_choice": false,
+        "weigh_ratio_by_duration": false
+      }
+    ],
+    [
+      "return",
+      {
+        "diversity_weight": 0.0,
+        "logged_relevance_weight": 0.0,
+        "played_ratio_weight": 0.0,
+        "ratio_baseline": "none",
+        "relative_ratio_weight": 0.0,
+        "returns_weight": 1.0,
+        "session_continues_weight": 0.0,
+        "weigh_by_choice": false,
+        "weigh_ratio_by_duration": false
+      }
+    ],
+    [
+      "ratio + return",
+      {
+        "diversity_weight": 0.0,
+        "logged_relevance_weight": 0.0,
+        "played_ratio_weight": 1.0,
+        "ratio_baseline": "none",
+        "relative_ratio_weight": 0.0,
+        "returns_weight": 1.0,
+        "session_continues_weight": 0.0,
+        "weigh_by_choice": false,
+        "weigh_ratio_by_duration": false
+      }
+    ]
+  ],
+  "rl": {
+    "advantage_estimator": "gae",
+    "anchor_adaptation_rate": 0.03,
+    "discount": 0.99,
+    "entropy_weight": 0.0,
+    "evaluate_every": 250,
+    "gae_lambda": 0.9,
+    "generation": {
+      "block_generated_items": true,
+      "block_history_items": true,
+      "greedy": false,
+      "horizon": 10,
+      "sample_from_top": null,
+      "temperature": 1.0
+    },
+    "histories_per_step": 512,
+    "history_len": 118,
+    "learning_rate": 1e-05,
+    "max_future": 20,
+    "max_grad_norm": 1.0,
+    "min_history": 3,
+    "mixed_precision": true,
+    "normalize_advantages": true,
+    "num_steps": 2000,
+    "ppo_clip": 0.2,
+    "ppo_epochs": 4,
+    "reference_kl_weight": 0.3,
+    "reward": {
+      "diversity_weight": 0.0,
+      "logged_relevance_weight": 0.0,
+      "played_ratio_weight": 1.0,
+      "ratio_baseline": "none",
+      "relative_ratio_weight": 0.0,
+      "returns_weight": 0.0,
+      "session_continues_weight": 0.0,
+      "weigh_by_choice": false,
+      "weigh_ratio_by_duration": false
+    },
+    "rollouts_per_history": 1,
+    "seed": 0,
+    "simulated_feedback": "expected",
+    "target_kl": null,
+    "value_learning_rate": 0.0001,
+    "value_warmup_steps": 50
+  },
+  "sample_from_top": 4,
+  "sampled_feedback_kl_weights": [
+    0.1,
+    0.3
+  ],
+  "sampled_list_counts": [
+    8
+  ],
+  "sweep_steps": 1000,
+  "transformer": {
+    "dropout": 0.2,
+    "hidden_size": 256,
+    "max_positions": 48,
+    "num_heads": 4,
+    "num_layers": 4
+  },
+  "window_stride": 24
+}

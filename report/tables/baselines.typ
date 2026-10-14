@@ -1,0 +1,23 @@
+#table(
+  columns: (1fr, auto, auto, auto, auto, auto, auto, auto),
+  align: (left, right, right, right, right, right, right, right),
+  stroke: none,
+  inset: (x: 4pt, y: 2.8pt),
+  table.hline(stroke: 0.8pt),
+  table.header(
+    [], table.cell(colspan: 3, align: center, strong[KION]), table.cell(colspan: 4, align: center, strong[Yambda]),
+    table.hline(start: 1, end: 4, stroke: 0.4pt),
+    table.hline(start: 4, end: 8, stroke: 0.4pt),
+    [], strong[NDCG\@10], strong[Recall\@10], strong[Coverage], strong[NDCG\@10], strong[on repeats], strong[on new], strong[Coverage],
+  ),
+  table.hline(stroke: 0.4pt),
+  [Most popular], [0.0903], [0.1303], [0.004], [0.0186], [0.0193], [0.0115], [0.000],
+  [Replay of the history], [0.0903], [0.1303], [0.004], [0.1873], [0.3722], [0.0000], [0.519],
+  [Markov chain], [0.0959], [0.1394], [0.466], [0.0550], [0.0934], [0.0139], [0.457],
+  [GRU4Rec], [0.1215], [0.1721], [0.544], [0.1116], [0.1706], [0.0298], [0.451],
+  [SASRec], [0.1082], [0.1580], [0.335], [0.0743], [0.1070], [0.0242], [0.367],
+  [BERT4Rec], [0.1290], [0.1811], [0.427], [0.1036], [0.1717], [0.0232], [0.461],
+  [GPT-2, ranked], [0.1220], [0.1726], [0.574], [0.1138], [0.1765], [0.0315], [0.466],
+  [GPT-2, generated], [0.1173], [0.1620], [0.495], [0.1172], [0.1865], [0.0261], [0.519],
+  table.hline(stroke: 0.8pt),
+)

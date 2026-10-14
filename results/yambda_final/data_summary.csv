@@ -1,0 +1,14 @@
+,0
+users,8711.0
+items,50000.0
+events,37221090.0
+train events,35009658.0
+validation events,1127899.0
+test events,1083533.0
+median events per user,2638.0
+mean played ratio,0.6514483690261841
+share of events played at least half,0.6385354109726502
+share of events that continue the session,0.9478808642978607
+share of events after which the user returns,0.9174913024261011
+share of events whose return outcome is known,0.9907850629844531
+share of organic events,0.5054754441635105

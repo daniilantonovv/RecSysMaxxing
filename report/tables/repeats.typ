@@ -1,0 +1,20 @@
+#table(
+  columns: (1fr, auto, auto, auto, auto, auto, auto),
+  align: (left, right, right, right, right, right, right),
+  stroke: none,
+  inset: (x: 4pt, y: 2.8pt),
+  table.hline(stroke: 0.8pt),
+  table.header(
+    [], strong[NDCG\@10], strong[on repeats], strong[on new], strong[From history], strong[Logged], strong[Coverage],
+  ),
+  table.hline(stroke: 0.4pt),
+  [Replay of the history], [0.1873], [0.3722], [0.0000], [100%], [0.1103], [0.519],
+  [Base recommender], [0.1172], [0.1865], [0.0261], [51%], [0.0669], [0.519],
+  [RL on the share, β = 0.3 (main run)], [0.1183], [0.1868], [0.0271], [51%], [0.0686], [0.506],
+  [Liked-only fine-tuning], [0.1198], [0.1903], [0.0269], [51%], [0.0692], [0.515],
+  [Off-policy REINFORCE, κ = 0.5], [0.1245], [0.1999], [0.0261], [49%], [0.0735], [0.475],
+  [Re-ranking, w = 0.3], [0.1155], [0.1786], [0.0321], [43%], [0.0659], [0.456],
+  [RL on logged relevance alone, β = 0], [0.1437], [0.2487], [0.0201], [62%], [0.0836], [0.486],
+  [RL on share + 10 × logged relevance, β = 0.1], [0.1309], [0.2142], [0.0250], [55%], [0.0758], [0.516],
+  table.hline(stroke: 0.8pt),
+)

@@ -1,0 +1,5 @@
+,validation/next_k/all/ndcg@10,validation/predicted/heldout/played_ratio,keeps_relevance,selected
+pretrained,0.13139399886131287,0.5990992188453674,True,False
+kl=0.0,0.001549526466988027,0.808569073677063,False,False
+kl=0.03,0.005559883546084166,0.7724696397781372,False,False
+kl=0.1,0.13134461641311646,0.6163074970245361,True,True
