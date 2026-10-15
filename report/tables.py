@@ -21,7 +21,7 @@ OUTPUT = Path(__file__).resolve().parent / "tables"
 SESSIONS = {"kion": "kion_final", "yambda": "yambda_final"}
 DATASET_NAMES = {"kion": "KION", "yambda": "Yambda"}
 # Reports whose rows are named by several columns; the last of them names the run.
-LABEL_COLUMNS = {"list_reward_methods": 2}
+LABEL_COLUMNS = {"list_reward_methods": 2, "reward_model_reactions": 2}
 GENERATED_LISTS = "next_k/"  # reports of fine-tuning runs put this before the quantities of generated lists
 MINUS = "−"
 MISSING = "–"
@@ -55,6 +55,8 @@ class Column:
     decimals: int = 3
     scale: float = 1.0
     unit: str = ""
+    relative_to: Source | None = None  # where set, the cell is the change in percent against the number this names instead
+    only_in: tuple[str, ...] = ()  # where set, the sessions whose panels show this column; the others leave it empty
 
 
 @dataclass(frozen=True)
@@ -448,7 +450,203 @@ TABLES = (
     ),
 )
 
+REVIEW_SESSIONS = {"kion": "kion_review", "yambda": "yambda_review"}
+
+
+def review_panels(rows_by_dataset: dict[str, tuple[Row, ...]]) -> tuple[Panel, ...]:
+    return tuple(Panel(DATASET_NAMES[dataset], rows, REVIEW_SESSIONS[dataset]) for dataset, rows in rows_by_dataset.items())
+
+
+def positions(*numbers: int) -> tuple[Row, ...]:
+    return tuple(run(f"position {number}", str(number)) for number in numbers)
+
+
+def steps(*numbers: int) -> tuple[Row, ...]:
+    return tuple(run(f"step {number}", str(number)) for number in numbers)
+
+
+def in_percent(header: str, name: str, decimals: int = 1, **sources) -> Column:
+    return quantity(header, name, decimals=decimals, scale=100, **sources)
+
+
+REVIEW_TABLES = (
+    Table(
+        "concentration",
+        report="exposure_concentration",
+        columns=(quantity("Coverage", "catalog_coverage"), quantity("Gini of impressions", "item_gini"), in_percent("Top 1% of items, % of impressions", "top_exposure_share", decimals=0)),
+        panels=review_panels({
+            "kion": (
+                run("Base recommender, ranked", "pretrained, ranked"),
+                run("Base recommender, generated", "pretrained, generated"),
+                run("RL, β = 0.3 (main run)", "RL, generated"),
+                anchor("1.0"),
+                anchor("0.3"),
+                anchor("0.1"),
+                anchor("0.0"),
+            ),
+            "yambda": (
+                run("Base recommender, ranked", "pretrained, ranked"),
+                run("Base recommender, generated", "pretrained, generated"),
+                run("RL, β = 0.3 (main run)", "RL, generated"),
+                anchor("0.3"),
+                anchor("0.1"),
+                anchor("0.05"),
+            ),
+        }),
+    ),
+    Table(
+        "content_types",
+        report="impressions_by_content_type",
+        columns=(
+            in_percent("Ranked", "pretrained, ranked", decimals=0),
+            in_percent("Generated", "pretrained, generated", decimals=0),
+            in_percent("RL, β = 0.3", "RL, generated", decimals=0),
+            in_percent("β = 1", "kl=1.0", decimals=0),
+            in_percent("β = 0.1", "kl=0.1", decimals=0),
+            in_percent("β = 0", "kl=0.0", decimals=0),
+        ),
+        column_groups=(("Base recommender", 2), ("Fine-tuned", 4)),
+        panels=(Panel(None, (run("Films, % of impressions", "film"), run("Series, % of impressions", "series")), "kion_review"),),
+    ),
+    Table(
+        "history_length",
+        report="relevance_by_history_length",
+        columns=(
+            quantity("Users", "num_users", decimals=0),
+            quantity("Base, ranked", "pretrained, ranked/ndcg@10", decimals=4),
+            quantity("Base, generated", "pretrained, generated/ndcg@10", decimals=4),
+            quantity("RL", "RL, generated/ndcg@10", decimals=4),
+            Column("RL change, %", Source(quantity="RL, generated/ndcg@10"), decimals=1, relative_to=Source(quantity="pretrained, generated/ndcg@10")),
+            Column("Logged change, %", Source(quantity="RL, generated/logged_played_ratio_per_item"), decimals=1, relative_to=Source(quantity="pretrained, generated/logged_played_ratio_per_item")),
+        ),
+        column_groups=(("", 1), ("NDCG@10", 4), ("", 1)),
+        panels=(
+            Panel("KION", tuple(run(group, group) for group in ("5 to 9 events", "9 to 14 events", "14 to 25 events", "25 to 1143 events")), "kion_review"),
+            Panel("Yambda", tuple(run(group, group) for group in ("50 to 1077 events", "1077 to 2961 events", "2961 to 6421 events", "6421 to 25401 events")), "yambda_review"),
+        ),
+    ),
+    Table(
+        "logit_shift",
+        report="logit_shift_by_item",
+        columns=(
+            in_percent("One shift per item, % of variance", "r2_per_item", decimals=0),
+            in_percent("unweighted", "r2_per_item_unweighted", decimals=0),
+            quantity("Usual share", "correlation_with_mean_played_ratio", decimals=2),
+            quantity("Log popularity", "correlation_with_log_popularity", decimals=2),
+            quantity("Duration", "correlation_with_duration_seconds", decimals=2),
+        ),
+        column_groups=(("", 2), ("Correlation of the item's shift with", 3)),
+        panels=review_panels({
+            "kion": (run("RL, β = 0.3 (main run)", "RL"), anchor("1.0"), anchor("0.3"), anchor("0.1"), anchor("0.0")),
+            "yambda": (run("RL, β = 0.3 (main run)", "RL"), anchor("0.3"), anchor("0.1"), anchor("0.05")),
+        }),
+    ),
+    Table(
+        "long_term_rewards",
+        report="reward_sweep",
+        columns=(
+            KL,
+            NDCG,
+            Column("Δ, %", Source(quantity="all/ndcg@10"), decimals=1, relative_to=Source(run="pretrained")),
+            quantity("Return", "predicted/heldout/returns_after_list"),
+            quantity("P(like)", "predicted/heldout/liked", decimals=4, only_in=("yambda_review",)),
+            quantity("P(adopt)", "predicted/heldout/adopts", only_in=("yambda_review",)),
+            LOGGED,
+            quantity("Cover.", "profile/catalog_coverage"),
+            quantity("Hours", "profile/mean_duration_seconds", decimals=1, scale=1 / 3600, only_in=("kion_review",)),
+        ),
+        panels=review_panels({
+            "kion": (
+                run("Base recommender", "pretrained"),
+                run("Return after list, β = 0.3", "return after the list, kl=0.3"),
+                run("Return after list, β = 0.1", "return after the list, kl=0.1"),
+                run("same, discount 0, β = 0.3", "return after the list, discount=0, kl=0.3"),
+                run("same, discount 0, β = 0.1", "return after the list, discount=0, kl=0.1"),
+            ),
+            "yambda": (
+                run("Base recommender", "pretrained"),
+                run("Like − dislike, β = 0.3", "likes, kl=0.3"),
+                run("Like − dislike, β = 0.1", "likes, kl=0.1"),
+                run("Adoption, β = 0.3", "adoption, kl=0.3"),
+                run("Adoption, β = 0.1", "adoption, kl=0.1"),
+                run("Return after list, β = 0.3", "return after the list, kl=0.3"),
+                run("Return after list, β = 0.1", "return after the list, kl=0.1"),
+                run("same, discount 0, β = 0.3", "return after the list, discount=0, kl=0.3"),
+                run("same, discount 0, β = 0.1", "return after the list, discount=0, kl=0.1"),
+            ),
+        }),
+    ),
+    Table(
+        "position_hits",
+        report="position_hits",
+        columns=(
+            quantity("All lists", "pretrained, ranked/hit_rate", decimals=4),
+            quantity("After a miss", "pretrained, ranked/hit_rate_after_miss", decimals=4),
+            quantity("After a hit", "pretrained, ranked/hit_rate_after_hit", decimals=3),
+            quantity("All lists", "pretrained, generated/hit_rate", decimals=4),
+            quantity("After a miss", "pretrained, generated/hit_rate_after_miss", decimals=4),
+            quantity("After a hit", "pretrained, generated/hit_rate_after_hit", decimals=3),
+        ),
+        column_groups=(("Ranked list", 3), ("Generated list", 3)),
+        panels=review_panels({dataset: positions(1, 2, 3, 5, 10) for dataset in REVIEW_SESSIONS}),
+    ),
+    Table(
+        "feedback_assumptions",
+        report="feedback_assumptions_on_real_sequences",
+        columns=(
+            quantity("Logged share", "train/logged/mean_played_ratio"),
+            quantity("AUC", "train/logged/auc"),
+            quantity("Expected", "train/expected/bias"),
+            quantity("Sampled", "train/sampled/bias"),
+            quantity("Finished", "train/assume_completed/bias"),
+            quantity("Unknown", "masked train/unknown/bias"),
+            quantity("AUC", "train/expected/auc"),
+            quantity("AUC", "masked train/unknown/auc"),
+        ),
+        column_groups=(("Real responses", 2), ("Bias of the prediction when earlier responses are", 4), ("Expected", 1), ("Unknown", 1)),
+        panels=review_panels({dataset: steps(1, 2, 3, 4, 5) for dataset in REVIEW_SESSIONS}),
+    ),
+    Table(
+        "masked_feedback",
+        columns=(KL, NDCG, ON_LIKED, SHARE, LOGGED, COVERAGE),
+        panels=review_panels({
+            dataset: (
+                run("Base recommender", "pretrained", report="kl_sweep"),
+                run("Expected feedback, β = 0.3", "kl=0.3", report="kl_sweep"),
+                run("Unknown feedback, β = 0.3", "unknown feedback, kl=0.3", report="masked_feedback_sweep"),
+                run("Expected feedback, β = 0.1", "kl=0.1", report="kl_sweep"),
+                run("Unknown feedback, β = 0.1", "unknown feedback, kl=0.1", report="masked_feedback_sweep"),
+            )
+            for dataset in REVIEW_SESSIONS
+        }),
+    ),
+    Table(
+        "reaction_heads",
+        report="reward_model_reactions",
+        columns=(quantity("AUC", "auc"), in_percent("Base rate, %", "base_rate", decimals=2), quantity("Events", "num_events", decimals=0)),
+        panels=(Panel("Yambda, held-out reward model", (run("Like", "heldout/liked"), run("Dislike", "heldout/disliked")), "yambda_review"),),
+    ),
+    Table(
+        "signal_spread",
+        report="reward_signal_spread",
+        columns=(quantity("Between candidates", "spread_between_candidates"), quantity("Between users", "spread_between_users"), quantity("Relevance AUC", "relevance_auc")),
+        panels=(
+            Panel("KION", (run("Consumed share", "played_ratio"), run("Return", "returns")), "kion_review"),
+            Panel("Yambda", (run("Consumed share", "played_ratio"), run("Return", "returns"), run("Like", "liked"), run("Adoption", "adopts")), "yambda_review"),
+        ),
+    ),
+)
+TABLES = (*TABLES, *REVIEW_TABLES)
+
 CHANGE_TABLES = (
+    ChangeTable(
+        "ranking_metrics",
+        sessions=("kion", "yambda"),
+        panels=tuple(
+            (metric, tuple(Change(f"{metric}@{k}", f"all/{name}@{k}", decimals=4, has_interval=False) for k in (1, 5, 10)))
+            for metric, name in (("NDCG", "ndcg"), ("Recall", "recall"), ("MAP", "map"), ("HitRate", "hit_rate"))
+        ),
+    ),
     ChangeTable(
         "main_run",
         sessions=("kion", "yambda"),
@@ -490,7 +688,9 @@ def report_cells(session: str, report: str) -> tuple[list[str], dict[str, list[s
     num_label_columns = LABEL_COLUMNS.get(report, 1)
     with path.open(newline="", encoding="utf-8") as file:
         header, *rows = list(csv.reader(file))
-    return header[num_label_columns:], {row[num_label_columns - 1]: row[num_label_columns:] for row in rows}
+    rows_by_label = {row[num_label_columns - 1]: row[num_label_columns:] for row in rows}
+    rows_by_label |= {"/".join(row[:num_label_columns]): row[num_label_columns:] for row in rows}
+    return header[num_label_columns:], rows_by_label
 
 
 def cell(source: Source) -> str | None:
@@ -580,6 +780,16 @@ def typst_table(headers: list[str], column_groups: tuple[tuple[str, int], ...], 
     return "\n".join(lines) + "\n"
 
 
+def displayed(source: Source, column: Column) -> str | None:
+    """A cell of a table: the number `source` names, or its change in percent against the number `column.relative_to` names."""
+    if column.relative_to is None:
+        return shown(source, column)
+    value, reference = number(source), number(column.relative_to.completed_by(source))
+    if value is None or not reference:
+        return None
+    return formatted(value / reference - 1, column.decimals, scale=100, signed=True)
+
+
 def rows_of(table: Table) -> list[list[str] | str]:
     """The body of a table. A row none of whose cells exist is left out and named, and so is a panel left without rows."""
     body: list[list[str] | str] = []
@@ -587,7 +797,10 @@ def rows_of(table: Table) -> list[list[str] | str]:
         defaults = Source(session=panel.session, report=table.report)
         panel_rows, absent = [], []
         for row in panel.rows:
-            cells = [shown(column.source.completed_by(row.source).completed_by(defaults), column) for column in table.columns]
+            cells = [
+                None if column.only_in and panel.session not in column.only_in else displayed(column.source.completed_by(row.source).completed_by(defaults), column)
+                for column in table.columns
+            ]
             if any(text is not None for text in cells):
                 panel_rows.append([row.label, *(MISSING if text is None else text for text in cells)])
             else:
@@ -628,8 +841,176 @@ def _before_after(change: Change, session: str) -> list[str]:
     return [formatted(before, change.decimals, change.scale), formatted(after, change.decimals, change.scale), relative_change]
 
 
+@dataclass(frozen=True)
+class SeedRow:
+    """A number of the study over its three seeds, as (report, row, column) of each dataset's over_three_seeds.csv."""
+
+    label: str
+    kion: tuple[str, str, str] | None
+    yambda: tuple[str, str, str] | None
+    decimals: int = 3
+    scale: float = 1.0
+    signed: bool = False
+
+
+def both(report: str, row: str, column: str) -> dict[str, tuple[str, str, str]]:
+    return {"kion": (report, row, column), "yambda": (report, row, column)}
+
+
+def relative_change_row(label: str, quantity_name: str) -> SeedRow:
+    return SeedRow(label, **both("rl_vs_pretrained", quantity_name, "relative_change"), decimals=1, scale=100, signed=True)
+
+
+SEED_PANELS = (
+    ("Main run (β = 0.3) against the base recommender", (
+        relative_change_row("NDCG@10, change in %", "next_k/all/ndcg@10"),
+        SeedRow("Predicted share, held-out model, change in %", **both("rl_vs_pretrained", "predicted/heldout/played_ratio", "relative_change"), decimals=2, scale=100, signed=True),
+        relative_change_row("Logged share per recommended item, change in %", "next_k/logged/played_ratio_per_item"),
+        SeedRow("Logged surplus per recommended item, change", **both("rl_vs_pretrained_significance", "logged/relative_surplus_per_item", "change"), decimals=4, signed=True),
+        SeedRow("Personal share of the predicted gain, %", **both("reward_gain_decomposition", "RL", "personal share of the gain"), decimals=1, scale=100),
+        SeedRow("KL from the base recommender", **both("rl_vs_pretrained", "training/kl_to_reference", "rl")),
+    )),
+    ("What the anchor weight means", (
+        SeedRow("KL at β = 0.3, leave-one-out baseline", ("advantage_estimators", "training/kl_to_reference", "leave-one-out, kl=0.3"), None),
+        SeedRow("Weight holding the KL budget, value model", ("kl_budget_sweep", "training/anchor_weight", "kl_budget=0.1"), ("kl_budget_sweep", "training/anchor_weight", "kl_budget=0.5")),
+        SeedRow("Weight holding the KL budget, leave-one-out", ("advantage_estimators", "training/anchor_weight", "leave-one-out, kl_budget=0.1"), None),
+        SeedRow("NDCG@10 at the budget, whole rest of the list", ("kl_budget_sweep", "next_k/all/ndcg@10", "kl_budget=0.1"), ("kl_budget_sweep", "next_k/all/ndcg@10", "kl_budget=0.5"), decimals=4),
+        SeedRow("NDCG@10 at the budget, own reward only", ("sequence_credit_ablation", "next_k/all/ndcg@10", "discount=0, kl_budget=0.1"), ("sequence_credit_ablation", "next_k/all/ndcg@10", "discount=0, kl_budget=0.5"), decimals=4),
+        SeedRow("NDCG@10 at the budget, one item per episode", ("sequence_credit_ablation", "next_k/all/ndcg@10", "horizon=1, kl_budget=0.1"), ("sequence_credit_ablation", "next_k/all/ndcg@10", "horizon=1, kl_budget=0.5"), decimals=4),
+        SeedRow("NDCG@10 at β = 0.03 (Yambda's cliff)", None, ("kl_sweep", "next_k/all/ndcg@10", "kl=0.03"), decimals=4),
+    )),
+    ("Alternatives and rewards", (
+        SeedRow("NDCG@10, RL main run", **both("alternatives_to_rl", "all/ndcg@10", "RL"), decimals=4),
+        SeedRow("NDCG@10, re-ranking w = 0.3", **both("alternatives_to_rl", "all/ndcg@10", "re-ranking, weight=0.3"), decimals=4),
+        SeedRow("Logged share per item, RL main run", **both("alternatives_to_rl", "logged/played_ratio_per_item", "RL"), decimals=4),
+        SeedRow("Logged share per item, re-ranking w = 0.3", **both("alternatives_to_rl", "logged/played_ratio_per_item", "re-ranking, weight=0.3"), decimals=4),
+        SeedRow("Personal share of the gain, re-ranking w = 0.3, %", **both("reward_gain_decomposition", "re-ranking, weight=0.3", "personal share of the gain"), decimals=1, scale=100),
+        SeedRow("NDCG@10, off-policy REINFORCE", **both("alternatives_to_rl", "all/ndcg@10", "off-policy REINFORCE, cap=0.5"), decimals=4),
+        SeedRow("NDCG@10, share + 10 × logged relevance, β = 0.3", ("relevance_reward_sweep", "next_k/all/ndcg@10", "ratio + 10.0 x logged relevance, kl=0.3"), None, decimals=4),
+        SeedRow("NDCG@10, logged relevance alone, β = 0", **both("relevance_reward_sweep", "next_k/all/ndcg@10", "logged relevance, kl=0.0"), decimals=4),
+        SeedRow("NDCG@10 on new items, logged relevance alone", None, ("relevance_reward_sweep", "next_k/new/ndcg@10", "logged relevance, kl=0.0"), decimals=4),
+    )),
+    ("Reference", (
+        SeedRow("NDCG@10, base recommender", **both("kl_sweep", "next_k/all/ndcg@10", "pretrained"), decimals=4),
+        SeedRow("NDCG@10 on new items, base recommender", None, ("kl_sweep", "next_k/new/ndcg@10", "pretrained"), decimals=4),
+        SeedRow("Reward model AUC, held-out copy", **both("reward_model_played_ratio", "heldout/reward model", "auc")),
+    )),
+)
+
+
+@lru_cache(maxsize=None)
+def three_seed_statistics(dataset: str) -> dict[tuple[str, str, str], tuple[float, float]]:
+    """(report, row, column) -> (mean, standard deviation) over the three seeds of a dataset."""
+    path = RESULTS / f"{dataset}_seeds" / "over_three_seeds.csv"
+    if not path.exists():
+        return {}
+    with path.open(newline="", encoding="utf-8") as file:
+        return {(row["report"], row["row"], row["column"]): (float(row["mean"]), float(row["std"])) for row in csv.DictReader(file)}
+
+
+def seeds_table() -> str:
+    body: list[list[str] | str] = []
+    for title, rows in SEED_PANELS:
+        body.append(title)
+        for row in rows:
+            cells = []
+            for dataset in DATASET_NAMES:
+                key = getattr(row, dataset)
+                statistic = three_seed_statistics(dataset).get(key) if key else None
+                cells.append(MISSING if statistic is None else f"{formatted(statistic[0], row.decimals, row.scale, signed=row.signed)} ± {formatted(statistic[1], row.decimals, row.scale)}")
+            body.append([row.label, *cells])
+    return typst_table(list(DATASET_NAMES.values()), (), body)
+
+
+@dataclass(frozen=True)
+class Method:
+    """One way of trading relevance for reward: its runs from the weakest move to the strongest, as (report, run)."""
+
+    label: str
+    runs: tuple[tuple[str, str], ...]
+
+
+BASE = ("kl_sweep", "pretrained")
+RELEVANCE_THRESHOLDS = (0.01, 0.05)  # the relevance a method may lose, as a share of the base recommender's NDCG@10
+EQUAL_RELEVANCE_METHODS = (
+    Method("Ranked list of the base recommender", (BASE, ("baselines", "GPT top-k"))),
+    Method("RL on the share, anchor sweep", (BASE, *(("kl_sweep", f"kl={weight}") for weight in (1.0, 0.5, 0.3, 0.2, 0.1, 0.05, 0.03, 0.0)))),
+    Method("RL on share + 10 × logged relevance", (BASE, *(("relevance_reward_sweep", f"ratio + 10.0 x logged relevance, kl={weight}") for weight in (0.3, 0.1, 0.03, 0.0)))),
+    Method("Re-ranking by the reward model", (("baselines", "GPT top-k"), *(("alternatives_to_rl", f"re-ranking, weight={weight}") for weight in (1.0, 0.3, 0.1, 0.03, 0.01, 0.0)))),
+    Method("Off-policy REINFORCE", (BASE, ("alternatives_to_rl", "off-policy REINFORCE, cap=0.5"), ("alternatives_to_rl", "off-policy REINFORCE, cap=2.0"))),
+    Method("Liked-only fine-tuning", (BASE, ("alternatives_to_rl", "liked-only fine-tuning"))),
+)
+
+
+def best_within(points: list[tuple[float, float, float]], lowest_ndcg: float) -> tuple[float, float] | None:
+    """(predicted share, logged share) of the highest predicted share whose NDCG@10 is at least `lowest_ndcg`.
+
+    points: (NDCG@10, predicted share, logged share) from the weakest move to the strongest; between two
+    consecutive points the curve is taken to be a straight line.
+    """
+    candidates = [(share, logged) for ndcg, share, logged in points if ndcg >= lowest_ndcg]
+    for (ndcg_0, share_0, logged_0), (ndcg_1, share_1, logged_1) in zip(points, points[1:]):
+        if ndcg_0 >= lowest_ndcg > ndcg_1:
+            fraction = (ndcg_0 - lowest_ndcg) / (ndcg_0 - ndcg_1)
+            candidates.append((share_0 + fraction * (share_1 - share_0), logged_0 + fraction * (logged_1 - logged_0)))
+    return max(candidates) if candidates else None
+
+
+def equal_relevance_table() -> str:
+    """Per method, the largest predicted gain it reaches without losing more than 1% or 5% of the base recommender's NDCG@10, and the logged share there."""
+    body: list[list[str] | str] = []
+    for dataset in DATASET_NAMES:
+        session = SESSIONS[dataset]
+
+        def point(report: str, run_name: str) -> tuple[float, float, float] | None:
+            values = [number(Source(session, report, run_name, name)) for name in ("all/ndcg@10", "predicted/heldout/played_ratio", "logged/played_ratio_per_item")]
+            return None if None in values else tuple(values)
+
+        base = point(*BASE)
+        body.append(DATASET_NAMES[dataset])
+        for method in EQUAL_RELEVANCE_METHODS:
+            points = [found for found in (point(report, run_name) for report, run_name in method.runs) if found is not None]
+            if len(points) < 2:
+                continue
+            row = [method.label]
+            for threshold in RELEVANCE_THRESHOLDS:
+                best = best_within(points, (1 - threshold) * base[0])
+                row += [MISSING, MISSING] if best is None else [formatted(best[0] / base[1] - 1, 1, 100, signed=True), formatted(best[1] / base[2] - 1, 1, 100, signed=True)]
+            body.append(row)
+    headers = ["Predicted share, %", "Logged share, %"] * len(RELEVANCE_THRESHOLDS)
+    groups = tuple((f"NDCG@10 at most {threshold:.0%} below the base", 2) for threshold in RELEVANCE_THRESHOLDS)
+    return typst_table(headers, groups, body)
+
+
+def titles_table(num_items: int = 5) -> str:
+    """The KION titles whose impressions grew and shrank most under the main RL run."""
+    path = RESULTS / "kion_review" / "largest_impression_changes.csv"
+    if not path.exists():
+        return typst_table([], (), [])
+    with path.open(newline="", encoding="utf-8") as file:
+        items = list(csv.DictReader(file))
+    body: list[list[str] | str] = []
+    for direction, title in (("gained", "Gained most"), ("lost", "Lost most")):
+        body.append(title)
+        for item in [item for item in items if item["direction"] == direction][:num_items]:
+            hours = float(item["duration_seconds"]) / 3600
+            body.append([
+                f"{item['title']} ({int(float(item['release_year']))})",
+                item["content_type"],
+                f"{hours:.1f}",
+                f"{int(float(item['train_popularity'])):,}",
+                formatted(float(item["mean_played_ratio"]), 2),
+                f"{int(float(item['impressions_before'])):,}",
+                f"{int(float(item['impressions_after'])):,}",
+            ])
+    return typst_table(["Type", "Hours", "Viewers in training", "Usual share", "Lists before", "after"], (), body)
+
+
 def write_tables() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    (OUTPUT / "seeds.typ").write_text(seeds_table(), encoding="utf-8")
+    (OUTPUT / "equal_relevance.typ").write_text(equal_relevance_table(), encoding="utf-8")
+    (OUTPUT / "titles.typ").write_text(titles_table(), encoding="utf-8")
     for table in TABLES:
         body = rows_of(table)
         (OUTPUT / f"{table.name}.typ").write_text(typst_table([column.header for column in table.columns], table.column_groups, body), encoding="utf-8")

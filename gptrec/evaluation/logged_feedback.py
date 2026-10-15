@@ -26,6 +26,8 @@ def logged_reception(lists: Tensor, examples: EvalExamples, liked_threshold: flo
     relative_ratio_of_hits: the same response as a quantile inside the item; above 0.5 the user took to the
         recommended items more than people usually take to those items, however easy the items are to finish.
     played_ratio_per_item, relative_surplus_per_item: the same two per recommended item, an item that was not hit counting as nothing.
+    liked_per_item, adopted_per_item: recommended items the user went on to like, or that were new to the user and that
+        the user kept coming back to, per recommended item; zero where the log records neither.
     served_hits_per_list, played_ratio_of_served_hits: only the next events that a recommender served, where the log says which.
     """
     per_user = hits_per_user(lists, examples, liked_threshold)
@@ -42,6 +44,8 @@ def logged_reception(lists: Tensor, examples: EvalExamples, liked_threshold: flo
         "relative_ratio_of_hits": mean_over("hits", "relative_ratio"),
         "played_ratio_per_item": reward["played_ratio_per_item"].mean().item(),
         "relative_surplus_per_item": reward["relative_surplus_per_item"].mean().item(),
+        "liked_per_item": reward["liked_per_item"].mean().item(),
+        "adopted_per_item": reward["adopted_per_item"].mean().item(),
         "served_hits_per_list": total["served_hits"] / len(lists),
         "played_ratio_of_served_hits": mean_over("served_hits", "served_played_ratio"),
     }
@@ -59,6 +63,8 @@ def _reward_per_item(per_user: dict[str, Tensor], list_length: int) -> dict[str,
     return {
         "played_ratio_per_item": per_user["played_ratio"] / list_length,
         "relative_surplus_per_item": (per_user["relative_ratio"] - USUAL_RELATIVE_RATIO * per_user["hits"]) / list_length,
+        "liked_per_item": per_user["liked"] / list_length,
+        "adopted_per_item": per_user["adopted"] / list_length,
     }
 
 
@@ -79,6 +85,8 @@ def hits_per_user(lists: Tensor, examples: EvalExamples, liked_threshold: float)
         "played_ratio": (is_hit * played_ratio_of_hit).sum(dim=1),
         "liked_hits": (is_hit * (played_ratio_of_hit >= liked_threshold)).sum(dim=1),
         "relative_ratio": (is_hit * relative_ratio.gather(1, position)).sum(dim=1),
+        "liked": (is_hit * examples.future_liked.cpu().gather(1, position)).sum(dim=1),
+        "adopted": (is_hit * examples.future_adopts.cpu().gather(1, position)).sum(dim=1),
         "served_hits": is_served_hit.sum(dim=1),
         "served_played_ratio": (is_served_hit * played_ratio.gather(1, served_position)).sum(dim=1),
     }

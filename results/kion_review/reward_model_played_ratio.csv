@@ -1,0 +1,9 @@
+reward model,predictor,mae,rmse,cross_entropy,auc
+train,reward model,0.2867,0.3451,0.6039,0.7575
+train,train mean,0.3699,0.3991,0.6894,0.5000
+train,item mean,0.3340,0.3790,0.6572,0.6560
+train,user recent mean,0.3311,0.3836,0.6699,0.6733
+heldout,reward model,0.2894,0.3484,0.6091,0.7555
+heldout,train mean,0.3699,0.3991,0.6894,0.5000
+heldout,item mean,0.3340,0.3790,0.6572,0.6560
+heldout,user recent mean,0.3311,0.3836,0.6699,0.6733

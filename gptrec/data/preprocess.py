@@ -1,7 +1,8 @@
 """From a raw event table to an InteractionLog: sessions, temporal split, item vocabulary, user filter.
 
 Every dataset adapter (see `gptrec.data.yambda`) produces the same raw event table, a polars
-DataFrame with one row per interaction and the columns listed in RAW_EVENT_COLUMNS.
+DataFrame with one row per interaction and the columns listed in RAW_EVENT_COLUMNS. A dataset that
+records likes and dislikes also produces a reaction table with the columns of REACTION_COLUMNS.
 """
 
 from __future__ import annotations
@@ -21,6 +22,12 @@ RAW_EVENT_COLUMNS = {
     "duration_seconds": "length of the item; null where unknown",
     "is_organic": "True when the user picked the item themselves, False when it was recommended",
 }
+REACTION_COLUMNS = {
+    "user_id": "as in the raw events",
+    "item_id": "as in the raw events",
+    "timestamp": "seconds, on the clock of the raw events",
+    "liked": "True for a like, False for a dislike",
+}
 
 SECONDS_PER_DAY = 86_400
 
@@ -34,14 +41,21 @@ class PreprocessingConfig:
     test_days: float = 7.0  # the last days of the log
     session_gap_seconds: int = 30 * 60  # a longer pause between two events of a user ends the session
     return_window_seconds: int = SECONDS_PER_DAY  # the user "returns" when their next session starts within this long
+    reaction_window_seconds: int = SECONDS_PER_DAY  # a like or dislike counts for the user's last event with the item at most this long before it
+    adoption_window_seconds: int | None = None  # a new item is "adopted" when the user comes back to it within this long; None: not measured
 
 
-def build_interaction_log(raw_events: pl.DataFrame, config: PreprocessingConfig) -> InteractionLog:
-    """Builds the in-memory log. Call `.save(directory)` on the result to persist and memory-map it."""
+def build_interaction_log(raw_events: pl.DataFrame, config: PreprocessingConfig, reactions: pl.DataFrame | None = None) -> InteractionLog:
+    """Builds the in-memory log. Call `.save(directory)` on the result to persist and memory-map it.
+
+    `reactions`: likes and dislikes with the columns of REACTION_COLUMNS; without them every reaction label is unknown.
+    """
     events = _in_user_time_order(raw_events.select(list(RAW_EVENT_COLUMNS)).with_row_index("source_row"))
     split = _temporal_split(events, config)
-    # Sessions and returns are properties of everything the user did, so they are derived before any event is dropped.
+    # Sessions, returns, reactions and adoption are properties of everything the user did, so they are derived before any event is dropped.
     events = events.with_columns(_retention_signals(events, split, config))
+    events = events.with_columns(_reaction_labels(events, reactions, split, config))
+    events = events.with_columns(_adoption_labels(events, split, config))
     in_train_period = pl.col("timestamp") < split.validation_start
 
     catalogue = _item_catalogue(events.filter(in_train_period), config)
@@ -65,6 +79,11 @@ def build_interaction_log(raw_events: pl.DataFrame, config: PreprocessingConfig)
         returns=events["returns"].to_numpy().astype(bool),
         session_continues_known=events["session_continues_known"].to_numpy().astype(bool),
         returns_known=events["returns_known"].to_numpy().astype(bool),
+        liked=events["liked"].to_numpy().astype(bool),
+        disliked=events["disliked"].to_numpy().astype(bool),
+        reactions_known=events["reactions_known"].to_numpy().astype(bool),
+        adopts=events["adopts"].to_numpy().astype(bool),
+        adopts_known=events["adopts_known"].to_numpy().astype(bool),
         is_organic=events["is_organic"].to_numpy().astype(bool),
         timestamp=events["timestamp"].to_numpy().astype(np.int64),
         user_offsets=user_offsets,
@@ -97,12 +116,88 @@ def _retention_signals(events: pl.DataFrame, split: TemporalSplit, config: Prepr
     has_event_after_session = first_event_after_session < len(clock)
     seconds_to_next_session = clock[np.minimum(first_event_after_session, len(clock) - 1)] - clock
 
-    last_observed_second = np.where(timestamp < split.validation_start, split.validation_start - 1, timestamp.max())
+    last_observed_second = _last_observed_second(timestamp, split)
     return [
         pl.Series("session_continues", seconds_to_next_event <= config.session_gap_seconds),
         pl.Series("returns", has_event_after_session & (seconds_to_next_session <= config.return_window_seconds)),
         pl.Series("session_continues_known", timestamp + config.session_gap_seconds <= last_observed_second),
         pl.Series("returns_known", timestamp + config.return_window_seconds <= last_observed_second),
+    ]
+
+
+def _last_observed_second(timestamp: np.ndarray, split: TemporalSplit) -> np.ndarray:
+    """The last moment whose events may decide the label of each event: train-period labels never depend on held-out events. int64 [E]"""
+    return np.where(timestamp < split.validation_start, split.validation_start - 1, timestamp.max())
+
+
+def _reaction_labels(events: pl.DataFrame, reactions: pl.DataFrame | None, split: TemporalSplit, config: PreprocessingConfig) -> list[pl.Series]:
+    """For every event, whether the user liked or disliked the item afterwards, and whether the log can tell.
+
+    A reaction counts for the user's latest event with the same item at most `reaction_window_seconds` before
+    it, so a like given during or soon after a listen labels that listen and no earlier one. A label is known
+    once its window has passed inside the observed data; without a reaction table no label is known.
+    Expects user-time order and the raw item ids.
+    """
+    timestamp = events["timestamp"].to_numpy()
+    last_observed_second = _last_observed_second(timestamp, split)
+    nothing = np.zeros(len(events), dtype=bool)
+    if reactions is None:
+        return [pl.Series("liked", nothing), pl.Series("disliked", nothing), pl.Series("reactions_known", nothing)]
+
+    listens = events.select(
+        "source_row", "user_id", "item_id", listen_timestamp=pl.col("timestamp"), last_observed_second=pl.Series(last_observed_second)
+    ).sort("listen_timestamp")
+    attributed = (
+        reactions.select(list(REACTION_COLUMNS))
+        .sort("timestamp")
+        .join_asof(
+            listens,
+            left_on="timestamp",
+            right_on="listen_timestamp",
+            by=["user_id", "item_id"],
+            strategy="backward",
+            tolerance=config.reaction_window_seconds,
+        )
+        .filter(pl.col("source_row").is_not_null() & (pl.col("timestamp") <= pl.col("last_observed_second")))
+        .group_by("source_row")
+        .agg(liked=pl.col("liked").any(), disliked=(~pl.col("liked")).any())
+    )
+    source_row = events["source_row"].to_numpy().astype(np.int64)
+    attributed_row = attributed["source_row"].to_numpy().astype(np.int64)
+    liked, disliked = np.zeros(source_row.max() + 1, dtype=bool), np.zeros(source_row.max() + 1, dtype=bool)
+    liked[attributed_row] = attributed["liked"].to_numpy().astype(bool)
+    disliked[attributed_row] = attributed["disliked"].to_numpy().astype(bool)
+    return [
+        pl.Series("liked", liked[source_row]),
+        pl.Series("disliked", disliked[source_row]),
+        pl.Series("reactions_known", timestamp + config.reaction_window_seconds <= last_observed_second),
+    ]
+
+
+def _adoption_labels(events: pl.DataFrame, split: TemporalSplit, config: PreprocessingConfig) -> list[pl.Series]:
+    """For every event, whether it is the user's first with the item and the user came back to the item later.
+
+    The item counts as adopted when the user consumed it again more than a session gap and at most
+    `adoption_window_seconds` after the first time. The label is known for first events whose window ends
+    inside the observed data, and unknown for every later event and when no window is set. A replay inside
+    the first session does not count: it says more about the session than about the item. Expects user-time order.
+    """
+    nothing = np.zeros(len(events), dtype=bool)
+    if config.adoption_window_seconds is None:
+        return [pl.Series("adopts", nothing), pl.Series("adopts_known", nothing)]
+    by_pair = ["user_id", "item_id"]
+    pairs = events.select(*by_pair, "timestamp").with_columns(
+        first_timestamp=pl.col("timestamp").min().over(by_pair),
+        is_first=pl.int_range(pl.len()).over(by_pair) == 0,
+    )
+    is_after_first_session = pl.col("timestamp") > pl.col("first_timestamp") + config.session_gap_seconds
+    comeback = pairs.select(pl.when(is_after_first_session).then(pl.col("timestamp")).min().over(by_pair)).to_series()
+    timestamp = events["timestamp"].to_numpy()
+    is_first = pairs["is_first"].to_numpy().astype(bool)
+    seconds_to_comeback = comeback.fill_null(np.iinfo(np.int64).max).to_numpy() - timestamp
+    return [
+        pl.Series("adopts", is_first & (seconds_to_comeback <= config.adoption_window_seconds)),
+        pl.Series("adopts_known", is_first & (timestamp + config.adoption_window_seconds <= _last_observed_second(timestamp, split))),
     ]
 
 

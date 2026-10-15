@@ -68,6 +68,11 @@ class InteractionLog:
     returns: np.ndarray  # bool [E], the user started another session within the return window
     session_continues_known: np.ndarray  # bool [E], False where the observed data ends before the session gap has passed
     returns_known: np.ndarray  # bool [E], False where the observed data ends before the return window has passed
+    liked: np.ndarray  # bool [E], the user liked the item after this event, before consuming it again
+    disliked: np.ndarray  # bool [E], the same for a dislike
+    reactions_known: np.ndarray  # bool [E], False where the dataset records no reactions or the log ends too soon to tell
+    adopts: np.ndarray  # bool [E], the user's first event with the item, and the user came back to the item later
+    adopts_known: np.ndarray  # bool [E], False for later events of an item, and where the log ends too soon to tell
     is_organic: np.ndarray  # bool [E], the user picked the item themselves (it was not recommended)
     timestamp: np.ndarray  # int64 [E], seconds
     user_offsets: np.ndarray  # int64 [U+1]
@@ -126,6 +131,11 @@ _EVENT_ARRAYS = (
     "returns",
     "session_continues_known",
     "returns_known",
+    "liked",
+    "disliked",
+    "reactions_known",
+    "adopts",
+    "adopts_known",
     "is_organic",
     "timestamp",
     "user_offsets",

@@ -185,7 +185,8 @@ def per_list_reception(predicted: Feedback, predicted_for_other_user: Feedback) 
     `personal_played_ratio` is what the list earns with its own user beyond what it would earn with another
     one: zero on average for lists that do not depend on the user. `chosen_played_ratio` counts an item the
     user is predicted not to take up as zero. `relative_ratio` is the played ratio as a quantile among
-    everyone who consumed the item, which no item earns by being easy to finish.
+    everyone who consumed the item, which no item earns by being easy to finish. `returns_after_list` is the
+    probability of a return after the last item, the end of the session the list would make.
     """
     played_ratio, played_ratio_for_other_user = predicted.played_ratio.mean(dim=1), predicted_for_other_user.played_ratio.mean(dim=1)
     relative_ratio, relative_ratio_for_other_user = predicted.relative_ratio.mean(dim=1), predicted_for_other_user.relative_ratio.mean(dim=1)
@@ -199,6 +200,10 @@ def per_list_reception(predicted: Feedback, predicted_for_other_user: Feedback) 
         "returns": predicted.returns.mean(dim=1),
         "is_chosen": predicted.is_chosen.mean(dim=1),
         "chosen_played_ratio": (predicted.is_chosen * predicted.played_ratio).mean(dim=1),
+        "liked": predicted.liked.mean(dim=1),
+        "disliked": predicted.disliked.mean(dim=1),
+        "adopts": predicted.adopts.mean(dim=1),
+        "returns_after_list": predicted.returns[:, -1],
     }
 
 

@@ -15,11 +15,11 @@ from torch import Tensor, nn
 from tqdm.auto import tqdm
 
 from gptrec.data.batches import EventBatch, EventWindows, swap_one_target_item
-from gptrec.data.log import InteractionLog
+from gptrec.data.log import PAD_ITEM, InteractionLog
 from gptrec.evaluation.reward_model_metrics import choice_quality, predict_heldout_feedback, prediction_quality, retention_quality
 from gptrec.models.backbone import TransformerConfig
 from gptrec.models.policy import NextItemPolicy, PolicyConfig
-from gptrec.models.reward_model import RewardModel, RewardModelConfig
+from gptrec.models.reward_model import UNKNOWN_FEEDBACK, RewardModel, RewardModelConfig
 from gptrec.models.sequence_recommender import SequenceRecommender
 from gptrec.training.precision import autocast, clipped_optimizer_step, gradient_scaler, seed_everything
 
@@ -61,6 +61,10 @@ class FeedbackLossWeights:
     returns: float = 0.25
     is_chosen: float = 0.25
     relative_ratio: float = 0.5
+    # Learned only where the log records them; zero leaves a reward model as it was before these signals existed.
+    liked: float = 0.0
+    disliked: float = 0.0
+    adopts: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,11 @@ class RewardModelTrainingConfig:
     window_stride: int = 64
     num_ratio_buckets: int = 10
     loss_weights: FeedbackLossWeights = field(default_factory=FeedbackLossWeights)
+    # Hidden responses: in this share of training windows the responses to the last 1..max_hidden_responses events
+    # are replaced by "unknown", so the model learns to predict after items whose response nobody saw, as after
+    # generated ones. Zero trains a model without the "unknown" input.
+    hidden_response_share: float = 0.0
+    max_hidden_responses: int = 10
 
 
 def train_policy(log: InteractionLog, config: PolicyTrainingConfig, device: torch.device, extra_validation: Validation | None = None) -> tuple[NextItemPolicy, list[Metrics]]:
@@ -110,8 +119,11 @@ def finetune_on_liked_items(
 def train_reward_model(log: InteractionLog, config: RewardModelTrainingConfig, device: torch.device, users: np.ndarray | None = None) -> tuple[RewardModel, list[Metrics]]:
     """Trains a reward model on the train period of `users` (default: everyone)."""
     seed_everything(config.optimization.seed)
-    reward_model = RewardModel(RewardModelConfig(log.num_items, config.transformer, config.num_ratio_buckets)).to(device)
-    loss = partial(feedback_loss, weights=config.loss_weights)
+    learns_unknown_responses = config.hidden_response_share > 0
+    reward_model = RewardModel(RewardModelConfig(log.num_items, config.transformer, config.num_ratio_buckets, learns_unknown_responses)).to(device)
+    loss = partial(feedback_loss, weights=config.loss_weights, hidden_response_share=config.hidden_response_share, max_hidden_responses=config.max_hidden_responses)
+    # Early stopping looks at the responses as they were observed, without random hiding.
+    validation_loss = partial(feedback_loss, weights=config.loss_weights)
     window_length = config.transformer.max_positions
     validation_windows = EventWindows.for_heldout(log, "validation", window_length, users)
 
@@ -136,6 +148,7 @@ def train_reward_model(log: InteractionLog, config: RewardModelTrainingConfig, d
         config.window_stride,
         config.optimization,
         device,
+        validation_loss=validation_loss,
         users=users,
         extra_validation=prediction_quality_on_validation,
     )
@@ -199,32 +212,57 @@ def _next_item_cross_entropy(model: SequenceRecommender, batch: EventBatch, posi
     return F.cross_entropy(model.item_logits(states), batch.items[:, 1:][positions])
 
 
-def feedback_loss(reward_model: RewardModel, batch: EventBatch, weights: FeedbackLossWeights) -> Tensor:
+def feedback_loss(
+    reward_model: RewardModel, batch: EventBatch, weights: FeedbackLossWeights, hidden_response_share: float = 0.0, max_hidden_responses: int = 1
+) -> Tensor:
     """Weighted binary cross-entropy of every feedback signal on target events.
 
-    The played ratio and its quantile inside the item are soft labels in [0, 1]. The retention signals are
-    learned only from events whose outcome the log knows. Whether an item is chosen is learned by contrast,
-    see `choice_loss`.
+    The played ratio and its quantile inside the item are soft labels in [0, 1]. The retention signals, likes,
+    dislikes and adoption are learned only from events whose outcome the log knows. Whether an item is chosen
+    is learned by contrast, see `choice_loss`. With `hidden_response_share` the model reads some responses as
+    unknown (see `hide_last_responses`); the labels it is trained on are always the observed ones.
     """
-    logits = reward_model(batch.items, batch.played_ratio)
+    played_ratio_read = hide_last_responses(batch, hidden_response_share, max_hidden_responses) if hidden_response_share > 0 else batch.played_ratio
+    logits = reward_model(batch.items, played_ratio_read)
+    reactions_known = batch.is_target & batch.reactions_known
     return (
         weights.played_ratio * _mean_binary_cross_entropy(logits.played_ratio, batch.played_ratio, batch.is_target)
         + weights.session_continues * _mean_binary_cross_entropy(logits.session_continues, batch.session_continues, batch.is_target & batch.session_continues_known)
         + weights.returns * _mean_binary_cross_entropy(logits.returns, batch.returns, batch.is_target & batch.returns_known)
-        + weights.is_chosen * choice_loss(reward_model, batch, logits.is_chosen)
+        + weights.is_chosen * choice_loss(reward_model, batch, logits.is_chosen, played_ratio_read)
         + weights.relative_ratio * _mean_binary_cross_entropy(logits.relative_ratio, batch.relative_ratio, batch.is_target)
+        + weights.liked * _mean_binary_cross_entropy(logits.liked, batch.liked, reactions_known)
+        + weights.disliked * _mean_binary_cross_entropy(logits.disliked, batch.disliked, reactions_known)
+        + weights.adopts * _mean_binary_cross_entropy(logits.adopts, batch.adopts, batch.is_target & batch.adopts_known)
     )
 
 
-def choice_loss(reward_model: RewardModel, batch: EventBatch, logits_of_logged_items: Tensor) -> Tensor:
+def hide_last_responses(batch: EventBatch, share: float, max_hidden: int) -> Tensor:
+    """The played ratios a reward model reads, with the responses to the last 1..max_hidden events of a random `share` of windows unknown. [B, L]
+
+    This is the situation of a generated list: the history's responses are known, the generated items' are not.
+    The first event of a window always keeps its response.
+    """
+    num_events = (batch.items != PAD_ITEM).sum(dim=1)
+    num_hidden = torch.randint(1, max_hidden + 1, num_events.shape, device=num_events.device)
+    first_hidden = (num_events - num_hidden).clamp_min(1)
+    is_hiding = torch.rand(num_events.shape, device=num_events.device) < share
+    position = torch.arange(batch.items.shape[1], device=num_events.device)
+    hidden = is_hiding[:, None] & (position[None, :] >= first_hidden[:, None]) & (position[None, :] < num_events[:, None])
+    return batch.played_ratio.masked_fill(hidden, UNKNOWN_FEEDBACK)
+
+
+def choice_loss(reward_model: RewardModel, batch: EventBatch, logits_of_logged_items: Tensor, played_ratio_read: Tensor | None = None) -> Tensor:
     """Binary cross-entropy of telling the item a user chose from an item they did not; the two kinds weigh the same.
 
     Logged target events are the chosen items. For the others, one target event per window is scored again
     with another item of the batch in its place (see `swap_one_target_item`). Such replacements are as popular
     as real choices, so the head has to use the history, not popularity. logits_of_logged_items: [B, L].
+    played_ratio_read: the responses the model reads, if not the observed ones.
     """
     swapped = swap_one_target_item(batch)
-    logits_of_swapped_items = reward_model(swapped.items, batch.played_ratio).is_chosen.gather(1, swapped.position[:, None]).squeeze(1)
+    played_ratio_read = batch.played_ratio if played_ratio_read is None else played_ratio_read
+    logits_of_swapped_items = reward_model(swapped.items, played_ratio_read).is_chosen.gather(1, swapped.position[:, None]).squeeze(1)
     chosen_loss = _mean_binary_cross_entropy(logits_of_logged_items, torch.ones_like(logits_of_logged_items), batch.is_target)
     not_chosen_loss = _mean_binary_cross_entropy(logits_of_swapped_items, torch.zeros_like(logits_of_swapped_items), swapped.is_different)
     return 0.5 * (chosen_loss + not_chosen_loss)

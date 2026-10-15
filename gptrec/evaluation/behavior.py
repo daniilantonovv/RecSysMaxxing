@@ -12,7 +12,7 @@ from torch import Tensor
 from gptrec.data.log import ItemTable
 from gptrec.evaluation.relevance import contains, first_occurrence
 
-HEAD_FRACTION = 0.01  # the "head" of the catalogue: its most popular 1% of items
+HEAD_FRACTION = 0.01  # the "head" of the catalogue: its most popular 1% of items, or the 1% recommended most
 LISTS_PER_PASS = 4096  # bounds the memory of comparing every two items of many lists
 
 
@@ -30,9 +30,11 @@ def recommendation_profile(recommended: Tensor, history_items: Tensor, items: It
     head_size = max(1, round(HEAD_FRACTION * items.num_items))
     head_threshold = popularity[1:].topk(head_size).values.min()
 
+    most_recommended = users_per_item.topk(max(1, round(HEAD_FRACTION * items.num_items))).values
     return {
         "catalog_coverage": (users_per_item > 0).double().mean().item(),
         "item_gini": _gini(users_per_item),
+        "top_exposure_share": (most_recommended.sum() / users_per_item.sum().clamp_min(1)).item(),
         "top_item_user_share": (users_per_item.max() / num_users).item(),
         "mean_user_pair_overlap": _mean_user_pair_overlap(users_per_item, num_users, list_length),
         "duplicate_rate": 1.0 - is_first.double().mean().item(),

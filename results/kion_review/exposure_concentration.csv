@@ -1,0 +1,8 @@
+,catalog_coverage,item_gini,top_exposure_share
+"pretrained, ranked",0.5736,0.9485,0.6246
+"pretrained, generated",0.4951,0.9633,0.7234
+"RL, generated",0.4518,0.9693,0.7589
+kl=0.0,0.0084,0.9987,1.0000
+kl=0.1,0.2783,0.9903,0.9187
+kl=0.3,0.4334,0.9717,0.7711
+kl=1.0,0.4771,0.9655,0.7389

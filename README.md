@@ -8,7 +8,8 @@ reinforcement learning against a learned reward model:
 1. **Base recommender** – a GPT-2 decoder over item-ID tokens, trained for next-item prediction.
 2. **Reward model** – a second GPT-2 decoder that predicts the user's response to an item given
    their history: the played ratio, whether the session continues, whether the user returns for
-   another session, and whether the user would take the item up at all.
+   another session, whether the user would take the item up at all, and, where the log records them,
+   likes, dislikes and whether a new item is adopted (played again in a later session).
 3. **RL fine-tuning** – the recommender generates lists item by item, the reward model scores
    them, and PPO with a KL anchor to the base recommender moves probability towards lists with a
    higher predicted return.
@@ -28,37 +29,41 @@ letting the reward ask for relevance, so that the anchor does not have to (weigh
 model's own estimate that the user would choose the item, and adding the logged-relevance reward of
 Petrov & Macdonald); rewards that pay only for what depends on the user; a reward for the played ratio
 relative to what is usual for the item, which no item earns by being easy to finish; and a reward that
-depends on the list as a whole.
+depends on the list as a whole. Long-term rewards pay for likes, for adoption and for the return after the
+whole list, and a reward model trained with hidden responses checks what simulating the responses to generated
+items does to the reward.
 
 Datasets: [Yambda](https://huggingface.co/datasets/yandex/yambda) (Yandex Music, the 50M variant) and
 [KION](https://github.com/irsafilo/KION_DATASET) (MTS online cinema). They differ in what makes the task
 hard: Yambda has long histories with repeats and second-level timestamps; KION has short histories,
 one row per user-item pair and dates only.
 
-> **Status.** `report/paper_v3.pdf` is the current write-up. It reports one KION session (`results/kion_final`) and the
-> Yambda session `results/yambda_final`, which continued `results/yambda_diagnostics`; its tables are typeset from
-> those files by `report/tables.py` and two of its figures drawn by `report/figures.py`. Still to run: seeds 1 and
-> 2 of each dataset. Earlier write-ups, kept for the
-> record: `report/paper_v2.pdf` (seven earlier runs), `report/report_v2_ru.pdf` and `report/first_iteration.pdf`
-> (Russian), `report/theory_ru.pdf` (background, Russian). The code is written on a machine without a GPU or
+> **Status.** `report/paper_v4.pdf` is the current write-up, organised around the task's five questions. It reports
+> the final sessions (`results/kion_final`, and `results/yambda_final`, which continued `results/yambda_diagnostics`),
+> the review sessions (`results/kion_review`, `results/yambda_review`: long-term rewards, reward models with hidden
+> responses, analyses by position, user and item) and seeds 1 and 2 of the core stages (`results/kion_seeds`,
+> `results/yambda_seeds`, with `over_three_seeds.csv` for all three seeds). Its tables are typeset from those files by
+> `report/tables.py` and its SVG figures drawn by `report/figures.py`. Earlier write-ups, kept for the record:
+> `report/paper_v3.pdf` (one seed), `report/paper_v2.pdf` (seven earlier runs), `report/report_v2_ru.pdf` and
+> `report/first_iteration.pdf` (Russian), `report/theory_ru.pdf` (background, Russian). The code is written on a machine without a GPU or
 > PyTorch, so changes are statically checked, not run, before they reach Kaggle. Every entry point therefore
 > starts with a few-minute end-to-end smoke test (`gptrec.experiment.run_smoke_test`,
 > `gptrec.seeds.run_seeds_smoke_test`).
 
 ## Findings in one page
 
-One seed per configuration, offline; numbers are for generated lists of ten on the test requests.
+Offline; numbers are for generated lists of ten on the test requests, and "±" is the standard deviation over three
+seeds. The paper (`report/paper_v4.pdf`) is organised around the same five questions.
 
 | Question | Answer |
 |---|---|
-| Does fine-tuning raise the reward? | On KION the predicted consumed share rises by 21.5% at anchor weight 0.3, and a reward model trained on other users agrees. On Yambda it rises by 1.7%. |
-| Is the gain real outside the model? | Not on KION: the logged share per recommended item is unchanged (+0.6%, interval -0.6 to +1.7), and the logged share relative to what is usual for the item falls. 99% of the predicted gain is what other users would give the same lists: the policy learned which titles everybody finishes. |
-| Is relevance preserved, and by what? | Only by the anchor: NDCG@10 falls by 10.7% at weight 0.3 on KION, and without an anchor every user gets the same list. The anchor weight is not comparable between advantage estimators (a leave-one-out baseline moves the policy 7 to 15 times further at the same weight); the KL distance is, and at an equal distance the estimators agree. |
-| Does the policy use the sequence? | No sign of it: at an equal KL distance, crediting an item with its own reward only, or training on one-item episodes, is no worse than crediting it with the rest of the list. PPO's clipping hardly engaged (at most 0.3% of sampled items in runs that did not collapse). |
-| Do other rewards help? | A reward that is neutral to how easy an item is to finish removes the drift towards films and leaves little to gain. Retention rewards buy little. Logged relevance is the term that improves logged outcomes; on Yambda it does so by replaying the user's history (NDCG@10 +23%, on new tracks -23%). |
-| Does it take RL? | No: re-ranking the base recommender's 100 best candidates by the same reward model reaches the same frontier without training, also for a reward that depends on the whole list. |
+| 1. How does behaviour change, and why? | The policy learns which items everybody finishes, not what each user wants. On KION the predicted consumed share rises by 23.9% ± 2.1 and a reward model trained on other users agrees, but almost all of the gain is what any other user would give the same lists (personal share 0.2% ± 0.5%), 78% of the policy's change is one shift per item (correlated 0.90 with the item's usual consumed share), films go from 66% to 80% of impressions, and the logged share per recommended item rises by only 1.1% ± 0.4. On Yambda the predicted share rises by 1.7%. |
+| 2. Is relevance kept? Does everyone get the same items? | On KION NDCG@10 falls by 11.5% ± 1.3 (NDCG, Recall, MAP and HitRate at K = 1, 5, 10 all fall by 8 to 14%), most for users with 5 to 9 events (-13.5%), and the most shown 1% of titles take 76% of impressions instead of 72%. On Yambda both are kept. Only the anchor keeps them, and its weight is not comparable between advantage estimators (a leave-one-out baseline ends 6.7 times further from the base recommender at the same weight); the KL distance is, and without an anchor every user gets the same list. |
+| 3. Long-term goals: return and continued interaction | Rewards for return, likes and adoption raise their predictions by a few percent at a moderate distance; the best case is adoption on Yambda, +19% at no loss of relevance but with a fifth less catalogue coverage. The return after the list on KION rises by 18% only by drifting to short titles, at -69% NDCG@10. Return varies four to nine times less between a user's candidates than between users, and adoption cannot be observed in a test week. |
+| 4. Generating several steps ahead | A generated list gains after a hit and loses after a miss: on Yambda the next generated item is a hit in 54% of lists after a hit against 25% in a ranked list, and in 4% against 6% after a miss. Simulated responses bias the predicted reward of later steps (+0.06 to +0.18 when earlier items are assumed finished); a reward model trained with hidden responses is unbiased and as accurate. At an equal KL distance, crediting each item with its own reward only is at least as good as crediting it with the rest of the list. |
+| 5. Trade-off between relevance and reward | RL settings choose a point on the frontier; only the reward function moves the frontier. Within 1% of the base recommender's NDCG@10 on KION, RL on the share gains 4% of predicted share, RL with logged relevance in the reward 17%, and re-ranking the base recommender's candidates by the same reward model 15%, without training. |
 
-| KION, test requests | NDCG@10 | Predicted share (held-out model) | Logged share per recommended item | Coverage |
+| KION, test requests (seed 0) | NDCG@10 | Predicted share (held-out model) | Logged share per recommended item | Coverage |
 |---|---|---|---|---|
 | Base recommender, generated lists | 0.1173 | 0.455 | 0.0173 | 0.495 |
 | RL on the share, anchor weight 0.3 | 0.1047 | 0.553 | 0.0174 | 0.449 |
@@ -74,7 +79,7 @@ that differ in the advantage estimator, in how the constraint is set and in how 
 To rebuild the paper from the reports:
 
 ```bash
-python3 report/tables.py && python3 report/figures.py && typst compile report/paper_v3.typ
+python3 report/tables.py && python3 report/figures.py && typst compile report/paper_v4.typ
 ```
 
 ## Setup
@@ -88,15 +93,16 @@ next-item training needs roughly 8–10 GB of GPU memory; lower `batch_size` or 
 
 ## Running on Kaggle
 
-`kaggle/` holds five self-contained notebooks. Each carries the `gptrec` source in `%%writefile` cells, so
+`kaggle/` holds seven self-contained notebooks. Each carries the `gptrec` source in `%%writefile` cells, so
 nothing has to be cloned or uploaded besides the notebook itself (*File -> Import Notebook*).
 
 | Notebook | Kaggle settings | Does |
 |---|---|---|
 | `1_full_pipeline_t4` | GPU T4 x2, internet on | downloads the chosen dataset and runs the whole study on one T4 |
-| `2_prepare_offline_bundle` | no accelerator, internet on | packs dependency wheels and both datasets into `/kaggle/working/gptrec_bundle`, then smoke-tests the pipeline of each dataset on the CPU |
+| `2_prepare_offline_bundle` | no accelerator, internet on | packs dependency wheels and both datasets into `/kaggle/working/gptrec_bundle`: the interactions, Yambda's likes and dislikes, KION's item table |
 | `3_train_offline` | large GPU, internet off, notebook 2's output attached as input | full-size run with the wheels and the data of the bundle |
 | `4_seeds_kion_1_2`, `4_seeds_yambda_1_2` | as notebook 3 | the core of the study once per random seed, with mean and standard deviation over the seeds of the session |
+| `5_review_kion`, `5_review_yambda` | as notebook 3 | long-term rewards (likes, coming back to a new track, the return after the list), a reward model that can be told a response is unknown, and analyses along the list and across users and items |
 
 Notebooks 1 and 3 handle one dataset per run: set `DATASET = "yambda"` or `"kion"` in the configuration cell.
 Notebook 3 also takes `SESSION`: `"diagnostics"` runs the stages that test what the anchor weight means and the
@@ -113,9 +119,9 @@ study that does not fit one 12-hour session is finished in two: on Yambda, `"fin
 The two sessions may differ only in the grids of their sweeps; anything else is refused before training starts.
 
 For the offline route: run notebook 2 with *Save Version -> Save & Run All* (only a saved version has
-an attachable output), check that its last cell says `passed` for both smoke tests, then in notebook 3
-use *Add Input -> Notebooks* to attach it and run. Notebooks 3 and 4 run their own copy of the code, so
-the bundle has to be rebuilt only when a dependency or a dataset changes.
+an attachable output), then in notebook 3, 4 or 5 use *Add Input -> Notebooks* to attach it and run. The
+training notebooks run their own copy of the code and smoke-test it on their GPU first, so the bundle has to
+be rebuilt only when a dependency or a dataset changes.
 
 Outputs go to `/kaggle/working/<dataset>_<session>/artifacts`: checkpoints, and `reports/` with every table
 (CSV), every figure (PNG) and the configuration that produced them; `<dataset>_<session>_reports.zip` is the same
@@ -159,10 +165,10 @@ Stage names are methods of `gptrec.experiment.Experiment`; report names are file
 | Question | Stage | What to look at |
 |---|---|---|
 | Is the base recommender competitive? | `compare_baselines` | `baselines.csv`: popularity, replay of history, Markov chain, GRU4Rec, SASRec, BERT4Rec, GPT ranked and generated |
-| 1. Does RL maximise the reward, and how does behaviour change? | `finetune` | `predicted/train/*` vs `predicted/heldout/*`; `*/profile/*`; `rl_exposure_change.csv` |
-| 2. Is relevance kept? Does everyone get the same items? | `finetune` | `*/all/*`, `*/liked/*`, `*/skipped/*` Recall/NDCG/MAP; coverage, Gini, `top_item_user_share`, `mean_user_pair_overlap`; `rl_vs_pretrained_significance.csv` |
-| 3. Long-term goals | `train_reward_models`, `sweep_rewards` | `reward_model_retention.csv`: are continuation and return predictable; `reward_signal_spread.csv`: can choosing items move them; `reward_sweep*`: rewards that pay for them, each at several anchor weights |
-| 4. Several steps ahead | `analyse_multistep` | `per_step_*.csv`: hit rate, entropy, predicted reward and reward-model disagreement by list position; `SimulatedFeedback` modes |
+| 1. How does behaviour change, and why? | `finetune`, `analyse_users_and_items` | `predicted/train/*` vs `predicted/heldout/*`; `*/profile/*`; `rl_exposure_change.csv`; `logit_shift_by_item.csv`: how much of the change is one shift per item; `impressions_by_content_type.csv` and `largest_impression_changes.csv` (KION titles) |
+| 2. Is relevance kept? Does everyone get the same items? | `finetune`, `analyse_users_and_items` | `*/all/*`, `*/liked/*`, `*/skipped/*` Recall/NDCG/MAP/HitRate at 1, 5, 10; `rl_vs_pretrained_significance.csv`; `relevance_by_history_length.csv`; `exposure_concentration.csv`: coverage, Gini, share of the most shown 1% |
+| 3. Long-term goals | `train_reward_models`, `sweep_rewards` | `reward_model_retention.csv` and `reward_model_reactions.csv`: are return, likes and adoption predictable; `reward_signal_spread.csv`: can choosing items move them; `reward_sweep*`: rewards that pay for them (`LIKES`, `ADOPTION`, `RETURN_AFTER_THE_LIST`), each at several anchor weights |
+| 4. Several steps ahead | `analyse_multistep`, `compare_feedback_masking` | `position_hits.csv`: hit rate by position after a miss and after a hit; `feedback_assumptions_on_real_sequences.csv`: the reward model on real next items under each `SimulatedFeedback` assumption; `masked_feedback_sweep*`: RL against a reward model trained with hidden responses |
 | 5. Relevance vs reward trade-off | `sweep_kl_weight`, `sweep_rewards`, `sweep_relevance_in_reward` | sweeps over `reference_kl_weight` and `RewardSpec`; `*_by_<signal>.png`: relevance against each signal the held-out reward model predicts |
 | Whose reward is it? | `explain_reward_gain` | `reward_gain_decomposition.csv`: how much of each method's gain other users would give the same lists; re-ranking by item averages, with no reward model, as the reference |
 | Can the reward ask for relevance itself? | `sweep_relevance_in_reward` | `relevance_reward_sweep*`: the logged-relevance reward of Petrov & Macdonald alone and together with the anchor; the choice-weighted reward |
@@ -284,7 +290,8 @@ gptrec/
   rollout.py     item-by-item generation, simulated feedback, reward function, re-ranking, best of several sampled lists
   training/      supervised.py (all supervised training), rl.py (PPO fine-tuning), off_policy.py (REINFORCE on logged
                  sessions), checkpoint.py, precision.py
-  evaluation/    relevance.py, significance.py, behavior.py, logged_feedback.py, reward_model_metrics.py, policy_report.py
+  evaluation/    relevance.py, significance.py, behavior.py, logged_feedback.py, reward_model_metrics.py, policy_report.py,
+                 analyses.py (by position, by user, by item)
   experiment.py  the whole study as resumable stages; reports.py, plots.py write its tables and figures
   seeds.py       the core stages once per random seed, and the summary over seeds
   labels.py      names of the reported quantities in words, for figures and tables

@@ -1,0 +1,21 @@
+direction,item_token,item_id,train_popularity,mean_played_ratio,duration_seconds,content_type,title,release_year,genres,impressions_before,impressions_after,change
+gained,13,8636,32435,0.6383,7742.8570,film,White Snow,2021.0000,"drama, sport",8388,24472,16084
+gained,22,4495,18762,0.5404,5147.0930,film,Palmyra,2020.0000,drama,8598,21579,12981
+gained,3,13865,108030,0.6898,6697.0000,film,Devyataev,2021.0000,"drama, war, adventure",14471,26328,11857
+gained,854,3669,953,0.5497,6090.7670,film,ДУХLESS,2011.0000,drama,7308,17315,10007
+gained,9,142,40254,0.6335,5281.8184,film,Masha,2020.0000,"drama, thriller",23485,32316,8831
+gained,2893,13582,175,0.7596,6475.0000,film,ДУХLESS 2,2015.0000,drama,6102,13980,7878
+gained,6,3734,63978,0.7331,5632.0000,film,The great-grandmother of easy behavior,2021.0000,comedy,24147,31698,7551
+gained,23,7417,16299,0.6490,6483.3335,film,Covert stand-up,2020.0000,comedy,1656,6401,4745
+gained,15,11237,24276,0.6585,5590.0000,film,City Day,2021.0000,comedy,989,4497,3508
+gained,46,3784,10156,0.5353,5083.5230,film,The Little warrior,2020.0000,"family, comedy",25452,28477,3025
+lost,14,12192,25571,0.0802,60933.5700,series,Themis sees,2019.0000,"drama, detective, comedy",33948,10781,-23167
+lost,7,2657,62651,0.1783,34368.1840,series,Listened to,2021.0000,"drama, thriller",16278,3343,-12935
+lost,8,4880,51094,0.1123,79077.7800,series,The Scam,2021.0000,comedy,16660,4038,-12622
+lost,11,9996,33452,0.2857,39079.0000,series,The Germans,2021.0000,drama,14654,5371,-9283
+lost,53,7793,8811,0.3253,6135.4165,film,Flash radio,2019.0000,"action, drama, science fiction, thriller",11925,5088,-6837
+lost,28,7829,14344,0.4320,6542.3910,film,Chaos Strikes,2021.0000,"action, science fiction, fantasy, adventure",8630,5059,-3571
+lost,141,6382,4246,0.2255,56914.2850,series,Mediator,2021.0000,"drama, thriller, detective",3750,1781,-1969
+lost,1694,11899,440,0.3352,5690.1400,film,The Truth About Love,2005.0000,"melodramas, comedies",2913,1160,-1753
+lost,29,16228,14312,0.1824,121590.0000,series,Contents,2021.0000,thrillers,3535,2047,-1488
+lost,236,4689,3023,0.2816,6088.0860,film,Wija. The Cursed Mirror,2020.0000,horror,2176,694,-1482

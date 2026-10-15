@@ -1,0 +1,9 @@
+reward model,period,signal,mae,rmse,cross_entropy,auc,base_rate,num_events
+train,validation,session_continues,0.0942,0.2177,0.1954,0.6108,0.9497,1127899.0000
+train,validation,returns,0.1451,0.2954,0.3344,0.5989,0.9121,1127899.0000
+train,test,session_continues,0.0958,0.2192,0.1980,0.6055,0.9496,1081970.0000
+train,test,returns,0.1406,0.2898,0.3229,0.6004,0.9159,914439.0000
+heldout,validation,session_continues,0.0958,0.2180,0.1961,0.6053,0.9497,1127899.0000
+heldout,validation,returns,0.1439,0.2967,0.3436,0.5872,0.9121,1127899.0000
+heldout,test,session_continues,0.0979,0.2200,0.1992,0.6000,0.9496,1081970.0000
+heldout,test,returns,0.1394,0.2909,0.3304,0.5970,0.9159,914439.0000

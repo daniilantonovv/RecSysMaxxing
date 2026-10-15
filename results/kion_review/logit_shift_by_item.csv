@@ -1,0 +1,6 @@
+,r2_per_item,r2_per_item_unweighted,mean_shift,correlation_with_mean_played_ratio,correlation_with_log_popularity,correlation_with_duration_seconds
+RL,0.7750,0.6675,-0.0939,0.8987,0.1169,-0.3617
+kl=0.0,0.7042,0.6476,-5.7325,0.5713,-0.0632,-0.1244
+kl=0.1,0.6689,0.7044,-0.4775,0.7463,0.2091,-0.2939
+kl=0.3,0.7650,0.6828,-0.0871,0.8817,0.1507,-0.3375
+kl=1.0,0.7011,0.6079,-0.0153,0.8904,0.1354,-0.3375

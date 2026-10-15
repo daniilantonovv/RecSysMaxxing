@@ -20,7 +20,7 @@ from gptrec.evaluation.relevance import contains
 from gptrec.models.policy import NextItemPolicy
 from gptrec.models.sequence_recommender import MASKED_LOGIT, NextItemScorer
 from gptrec.models.value_model import ValueModel
-from gptrec.models.reward_model import Feedback, RewardModel
+from gptrec.models.reward_model import UNKNOWN_FEEDBACK, Feedback, RewardModel
 from gptrec.tensors import TensorGroup
 
 
@@ -48,6 +48,12 @@ class SimulatedFeedback(str, Enum):
     EXPECTED = "expected"  # its own expected played ratio
     SAMPLED = "sampled"  # a draw: fully played with probability equal to the expected ratio, else skipped
     ASSUME_COMPLETED = "assume_completed"  # the user played everything
+    UNKNOWN = "unknown"  # nothing: the response is not known, which only a model trained with hidden responses can read
+    LOGGED = "logged"  # what the user really did; exists only when the "generated" items are the user's real next items
+
+
+# The assumptions a simulation can make about items nobody has consumed.
+SIMULATION_ASSUMPTIONS = (SimulatedFeedback.EXPECTED, SimulatedFeedback.SAMPLED, SimulatedFeedback.ASSUME_COMPLETED)
 
 
 @dataclass
@@ -147,12 +153,17 @@ def state_values(value_model: ValueModel, history: HistoryBatch, actions: Tensor
 
 
 @torch.no_grad()
-def simulate_feedback(reward_model: RewardModel, history: HistoryBatch, actions: Tensor, mode: SimulatedFeedback) -> Feedback:
-    """The reward model's expected response to every generated item, played out step by step. Two [B, K] tensors.
+def simulate_feedback(reward_model: RewardModel, history: HistoryBatch, actions: Tensor, mode: SimulatedFeedback, logged_played_ratio: Tensor | None = None) -> Feedback:
+    """The reward model's expected response to every generated item, played out step by step. [B, K] tensors.
 
     The model sees the real feedback on the history; for generated items it sees the feedback chosen by `mode`.
+    logged_played_ratio: float [B, K], the real responses to `actions`; needed only for the LOGGED mode.
     """
     mode = SimulatedFeedback(mode)
+    if mode is SimulatedFeedback.UNKNOWN and not reward_model.config.unknown_feedback:
+        raise ValueError("this reward model was trained without hidden responses, so it cannot read an unknown one")
+    if mode is SimulatedFeedback.LOGGED and logged_played_ratio is None:
+        raise ValueError("the logged mode needs the responses the user really gave")
     batch_index = torch.arange(len(history), device=actions.device)
     history_width, horizon = history.items.shape[1], actions.shape[1]
     items = append_actions(history, actions)
@@ -164,19 +175,24 @@ def simulate_feedback(reward_model: RewardModel, history: HistoryBatch, actions:
         visible = history_width + step + 1
         prediction = reward_model.predict(items[:, :visible], played_ratio[:, :visible])
         expected = prediction.map(lambda values: values[batch_index, position])
-        played_ratio[batch_index, position] = _fed_back_played_ratio(expected.played_ratio, mode)
+        logged = None if logged_played_ratio is None else logged_played_ratio[:, step].to(played_ratio.dtype)
+        played_ratio[batch_index, position] = _fed_back_played_ratio(expected.played_ratio.to(played_ratio.dtype), mode, logged)
         steps.append(expected)
 
     return Feedback.stack(steps, dim=1)
 
 
-def _fed_back_played_ratio(expected_played_ratio: Tensor, mode: SimulatedFeedback) -> Tensor:
+def _fed_back_played_ratio(expected_played_ratio: Tensor, mode: SimulatedFeedback, logged_played_ratio: Tensor | None) -> Tensor:
     if mode is SimulatedFeedback.EXPECTED:
         return expected_played_ratio
     if mode is SimulatedFeedback.SAMPLED:
         return torch.bernoulli(expected_played_ratio)
     if mode is SimulatedFeedback.ASSUME_COMPLETED:
         return torch.ones_like(expected_played_ratio)
+    if mode is SimulatedFeedback.UNKNOWN:
+        return torch.full_like(expected_played_ratio, UNKNOWN_FEEDBACK)
+    if mode is SimulatedFeedback.LOGGED:
+        return logged_played_ratio
     raise ValueError(f"unknown simulated feedback mode: {mode}")
 
 
@@ -191,14 +207,19 @@ class RewardSpec:
     reward = P(chosen) * (played_ratio_weight * ratio term
                           + relative_ratio_weight * relative played ratio
                           + session_continues_weight * P(session continues)
-                          + returns_weight * P(user returns))
+                          + returns_weight * P(user returns)
+                          + liked_weight * P(like) - disliked_weight * P(dislike)
+                          + adoption_weight * P(the user comes back to the item))
              + logged_relevance_weight * [the user really consumed the item next] / log2(position in the list + 1)
              + diversity_weight * distance of the item to the items before it in the list
+             + final_returns_weight * P(user returns after the last item), for the last item only
 
     P(chosen) is left out unless `weigh_by_choice` is set. The first line is predicted by a reward model
     for any item. The second is read from the log and exists only for moments whose future is known:
     it is the immediate reward of NDCG in Petrov & Macdonald (arXiv:2403.04875). The third depends on the
-    rest of the list, so it is the one term that scoring items one at a time cannot maximise.
+    rest of the list, so it is the one term that scoring items one at a time cannot maximise. The fourth
+    pays the whole list for what happens after it: no item earns it on its own, so it is the one reward
+    whose credit has to travel back along the list.
 
     The relative played ratio is the played ratio as a quantile among everyone who consumed the item. Its
     mean is 0.5 for every item, so no item earns it by being short or easy to finish.
@@ -223,6 +244,10 @@ class RewardSpec:
     # Cosine distance, in the base recommender's item embeddings, to the items already in the list, summed and divided
     # by K - 1. Over a list of K items these terms add up to K / 2 times its mean pairwise distance.
     diversity_weight: float = 0.0
+    liked_weight: float = 0.0
+    disliked_weight: float = 0.0
+    adoption_weight: float = 0.0
+    final_returns_weight: float = 0.0
 
     @property
     def needs_logged_future(self) -> bool:
@@ -235,6 +260,10 @@ class RewardSpec:
     @property
     def depends_on_the_list(self) -> bool:
         return self.diversity_weight != 0.0
+
+    @property
+    def rewards_the_end_of_the_list(self) -> bool:
+        return self.final_returns_weight != 0.0
 
 
 class RewardFunction:
@@ -261,6 +290,10 @@ class RewardFunction:
         reward = self.item_reward(feedback, lists, future_items, feedback_for_other_user)
         if self.spec.depends_on_the_list:
             reward = reward + self.spec.diversity_weight * distance_to_earlier_items(lists, self.unit_item_embeddings)
+        if self.spec.rewards_the_end_of_the_list:
+            is_last_item = torch.zeros_like(reward)
+            is_last_item[:, -1] = 1.0
+            reward = reward + self.spec.final_returns_weight * is_last_item * feedback.returns
         return reward
 
     def item_reward(self, feedback: Feedback, lists: Tensor, future_items: Tensor | None = None, feedback_for_other_user: Feedback | None = None) -> Tensor:
@@ -274,6 +307,9 @@ class RewardFunction:
             + spec.relative_ratio_weight * feedback.relative_ratio
             + spec.session_continues_weight * feedback.session_continues
             + spec.returns_weight * feedback.returns
+            + spec.liked_weight * feedback.liked
+            - spec.disliked_weight * feedback.disliked
+            + spec.adoption_weight * feedback.adopts
         )
         if spec.weigh_by_choice:
             reward = reward * feedback.is_chosen

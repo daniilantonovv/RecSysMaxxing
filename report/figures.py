@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from tables import DATASET_NAMES, SESSIONS, Source, number
+from tables import DATASET_NAMES, REVIEW_SESSIONS, SESSIONS, Source, number
 
 OUTPUT = Path(__file__).resolve().parent / "figures"
 FONT = "New Computer Modern"
@@ -43,11 +43,12 @@ class Series:
     color: str
     marker: str = "circle"
     joined: bool = True
+    prefix: str = ""  # put before the quantity of each axis, for reports whose columns name a policy and a quantity
 
 
 @dataclass(frozen=True)
 class Axis:
-    quantity: str
+    quantity: str | None  # None: the run's name is the value, for reports whose rows are positions or steps
     label: str
     logarithmic: bool = False
 
@@ -72,6 +73,8 @@ ANCHOR_WEIGHTS = ("1.0", "0.5", "0.3", "0.2", "0.1", "0.05", "0.03", "0.0")
 KL_BUDGETS = ("0.1", "0.2", "0.5")
 RERANKING_WEIGHTS = ("1.0", "0.3", "0.1", "0.03", "0.01", "0.0")
 BASE_RECOMMENDER = Series("base recommender, generated lists", (("kl_sweep", "pretrained"),), BLACK, marker="star", joined=False)
+POSITIONS = tuple(("position_hits", str(position)) for position in range(1, 11))
+STEPS = tuple(("feedback_assumptions_on_real_sequences", str(step)) for step in range(1, 6))
 
 FIGURES = (
     Figure(
@@ -122,13 +125,42 @@ FIGURES = (
             Series("base recommender, ranked lists", (("baselines", "GPT top-k"),), BLACK, marker="square", joined=False),
         ),
     ),
+    Figure(
+        "position_hits",
+        horizontal=Axis(None, "position in the list"),
+        vertical=(Axis("hit_rate", "all lists"), Axis("hit_rate_after_miss", "after a miss"), Axis("hit_rate_after_hit", "after a hit")),
+        series=(
+            Series("base recommender, ranked list", POSITIONS, BLACK, marker="square", prefix="pretrained, ranked/"),
+            Series("base recommender, generated list", POSITIONS, BLUE, prefix="pretrained, generated/"),
+            Series("RL main run, generated list", POSITIONS, ORANGE, marker="triangle", prefix="rl, generated/"),
+        ),
+        sessions=tuple(REVIEW_SESSIONS.values()),
+    ),
+    Figure(
+        "feedback_assumptions",
+        horizontal=Axis(None, "step: real next item of the user"),
+        vertical=(Axis("bias", "bias of the prediction"), Axis("auc", "AUC")),
+        series=(
+            Series("earlier responses as logged", STEPS, BLACK, marker="star", prefix="train/logged/"),
+            Series("expected", STEPS, BLUE, prefix="train/expected/"),
+            Series("sampled", STEPS, GREEN, marker="triangle", prefix="train/sampled/"),
+            Series("assumed finished", STEPS, VERMILION, marker="square", prefix="train/assume_completed/"),
+            Series("unknown (masked reward model)", STEPS, PURPLE, marker="diamond", prefix="masked train/unknown/"),
+        ),
+        sessions=tuple(REVIEW_SESSIONS.values()),
+        legend_columns=2,
+    ),
 )
+
+
+def dataset_name(session: str) -> str:
+    return DATASET_NAMES.get(session, DATASET_NAMES.get(session.split("_")[0], session))
 
 
 def points_of(series: Series, session: str, horizontal: Axis, vertical: Axis) -> list[tuple[float, float]]:
     points = []
     for report, run in series.runs:
-        x, y = (number(Source(session, report, run, axis.quantity)) for axis in (horizontal, vertical))
+        x, y = (float(run) if axis.quantity is None else number(Source(session, report, run, series.prefix + axis.quantity)) for axis in (horizontal, vertical))
         if x is not None and y is not None:
             points.append((max(x, SMALLEST_DISTANCE) if horizontal.logarithmic else x, y))
     return points
@@ -190,7 +222,11 @@ def panel(figure: Figure, session: str, vertical: Axis, left: float, top: float)
         def across(x: float) -> float:
             return plot_left + (math.log10(x) - x_low) / (x_high - x_low) * plot_width
     else:
-        ticks = linear_ticks(min(xs), max(xs))
+        if figure.horizontal.quantity is None:
+            positions = [float(run) for series in figure.series for _, run in series.runs]
+            ticks = [float(position) for position in range(int(min(positions)), int(max(positions)) + 1)]
+        else:
+            ticks = linear_ticks(min(xs), max(xs))
         step = ticks[1] - ticks[0]
         x_ticks = [(tick, tick_text(tick, step)) for tick in ticks]
         x_low, x_high = ticks[0], ticks[-1]
@@ -213,7 +249,7 @@ def panel(figure: Figure, session: str, vertical: Axis, left: float, top: float)
         parts.append(f'<line x1="{plot_left}" y1="{up(tick):.1f}" x2="{plot_left + plot_width}" y2="{up(tick):.1f}" stroke="{GRID}"/>')
         parts.append(text(plot_left - 5, up(tick) + 4, tick_text(tick, y_step), size=11, anchor="end"))
     parts.append(f'<path d="M{plot_left},{plot_top} V{plot_top + plot_height} H{plot_left + plot_width}" stroke="{AXIS}" fill="none"/>')
-    parts.append(text(plot_left + plot_width / 2, top + 15, f"{DATASET_NAMES[session]}: {vertical.label}", size=12, weight="bold"))
+    parts.append(text(plot_left + plot_width / 2, top + 15, f"{dataset_name(session)}: {vertical.label}", size=12, weight="bold"))
 
     for series, points in drawn.items():
         if series.joined and len(points) > 1:

@@ -50,7 +50,16 @@ from gptrec.baselines.suite import BaselineConfig, fit_baselines
 from gptrec.data.batches import EvalExamples, EventWindows, build_eval_examples
 from gptrec.data.log import InteractionLog, Period
 from gptrec.data.preprocess import PreprocessingConfig, build_interaction_log
-from gptrec.evaluation.behavior import intra_list_distance, list_overlap
+from gptrec.evaluation.analyses import (
+    exposure_lorenz,
+    feedback_assumptions_on_real_sequences,
+    impressions_by_attribute,
+    largest_impression_changes,
+    logit_shift_by_item,
+    position_hits,
+    relevance_by_history_length,
+)
+from gptrec.evaluation.behavior import intra_list_distance, list_overlap, recommendation_profile
 from gptrec.evaluation.policy_report import (
     EvaluationConfig,
     ListEvaluation,
@@ -72,6 +81,7 @@ from gptrec.evaluation.reward_model_metrics import (
     error_by_group,
     predict_heldout_feedback,
     quality_by_origin,
+    reaction_quality,
     relative_ratio_report,
     retention_quality,
     reward_model_report,
@@ -83,6 +93,7 @@ from gptrec.models.reward_model import Feedback, RewardModel
 from gptrec.models.sequence_recommender import NextItemScorer
 from gptrec.reports import ReportWriter
 from gptrec.rollout import (
+    SIMULATION_ASSUMPTIONS,
     RatioBaseline,
     RewardFunction,
     RewardSpec,
@@ -119,6 +130,9 @@ LOGGED_RELEVANCE = RewardSpec(played_ratio_weight=0.0, logged_relevance_weight=1
 PERSONAL_RATIO = RewardSpec(ratio_baseline=RatioBaseline.OTHER_USER)
 RATIO_ABOVE_ITEM_MEAN = RewardSpec(ratio_baseline=RatioBaseline.ITEM_MEAN)
 RELATIVE_RATIO = RewardSpec(played_ratio_weight=0.0, relative_ratio_weight=1.0)
+LIKES = RewardSpec(played_ratio_weight=0.0, liked_weight=1.0, disliked_weight=1.0)  # P(like) - P(dislike)
+ADOPTION = RewardSpec(played_ratio_weight=0.0, adoption_weight=1.0)  # P(the user keeps coming back to a new item)
+RETURN_AFTER_THE_LIST = RewardSpec(played_ratio_weight=0.0, final_returns_weight=1.0)  # P(return) after the last item only
 # The signals of the held-out reward model that a reward can be aimed at: what the trade-off figures put against relevance.
 JUDGED_SIGNALS = ("played_ratio", "personal_played_ratio", "session_continues", "returns", "relative_ratio")
 REALISED_KL = "training/kl_to_reference"  # nats per generated item between a fine-tuned policy and the base recommender
@@ -131,6 +145,7 @@ TRAINING_STATISTICS = {
 }
 END_OF_TRAINING_STEPS = 50  # last iterations of a run over which those are averaged
 INTRA_LIST_DISTANCE = "profile/intra_list_distance"  # mean cosine distance between two items of a list, in the base recommender's embeddings
+FEEDBACK_ASSUMPTION_STEPS = 5  # real next items of a user on which the assumptions of a simulation are checked
 TRAINING_CURVES = [
     "reward",
     "kl_to_reference",
@@ -171,6 +186,7 @@ RUN_GRIDS = (
     "relative_reward_kl_weights",
     "diversity_weights",
     "diversity_kl_weights",
+    "masked_feedback_kl_weights",
 )
 
 
@@ -221,6 +237,9 @@ class ExperimentConfig:
     relative_reward_kl_weights: tuple[float, ...] = ()  # anchor weights at which the played ratio relative to the item's usual one is the reward
     diversity_weights: tuple[float, ...] = ()  # weight of intra-list distance against the main run's reward
     diversity_kl_weights: tuple[float, ...] = (0.3,)  # anchor weights at which each of those is tried
+    # What a simulation is told about generated items: a reward model that can be told "unknown" needs no assumption.
+    masked_feedback_kl_weights: tuple[float, ...] = ()  # anchor weights at which the policy is fine-tuned against such a model
+    hidden_response_share: float = 0.5  # its training windows in which the responses to the last events are hidden
 
     def __post_init__(self) -> None:
         if self.horizon >= self.transformer.max_positions:
@@ -280,7 +299,6 @@ def smoke_test_config(config: ExperimentConfig, max_users: int) -> ExperimentCon
         rl=rl,
         sweep_steps=3,
         kl_weights=(0.0, 1.0),
-        rewards=(DEFAULT_REWARDS[1], DEFAULT_REWARDS[-1]),
         reward_kl_weights=(0.3,),
         choice_reward_kl_weights=(0.0,),
         logged_relevance_weights=(1.0,),
@@ -301,11 +319,20 @@ def smoke_test_config(config: ExperimentConfig, max_users: int) -> ExperimentCon
         relative_reward_kl_weights=(1.0,),
         diversity_weights=(1.0,),
         diversity_kl_weights=(1.0,),
+        masked_feedback_kl_weights=(1.0,),
     )
     return replace(shrunk, **switched_off)
 
 
-def run_smoke_test(raw_events: pl.DataFrame, config: ExperimentConfig, home: str | Path, device: torch.device, max_users: int = 200) -> None:
+def run_smoke_test(
+    raw_events: pl.DataFrame,
+    config: ExperimentConfig,
+    home: str | Path,
+    device: torch.device,
+    max_users: int = 200,
+    reactions: pl.DataFrame | None = None,
+    item_metadata: pl.DataFrame | None = None,
+) -> None:
     """Runs all stages of `config`, shrunk, on the first `max_users` users: finds out in minutes whether anything is broken.
 
     A second session then starts from the artifacts of the first with one more anchor weight in its sweep, the
@@ -314,12 +341,12 @@ def run_smoke_test(raw_events: pl.DataFrame, config: ExperimentConfig, home: str
     """
     home = Path(home)
     first_session = smoke_test_config(config, max_users)
-    Experiment(first_session, home / "first_session", device, show_figures=False).run(raw_events)
+    Experiment(first_session, home / "first_session", device, show_figures=False).run(raw_events, reactions, item_metadata)
 
     second_session = replace(first_session, kl_weights=(*first_session.kl_weights, 0.5))
     reuse_artifacts(home / "first_session", home / "second_session", second_session)
     continued = Experiment(second_session, home / "second_session", device, show_figures=False)
-    continued.prepare_data(raw_events)
+    continued.prepare_data(raw_events, reactions)
     continued.pretrain_policy()
     continued.train_reward_models()
     continued.finetune()
@@ -392,9 +419,9 @@ class Experiment:
         self._reranked_evaluations: dict[str, ListEvaluation] = {}
         self._stage_seconds: dict[str, float] = {}
 
-    def run(self, raw_events: pl.DataFrame) -> None:
-        """All stages in order."""
-        self.prepare_data(raw_events)
+    def run(self, raw_events: pl.DataFrame, reactions: pl.DataFrame | None = None, item_metadata: pl.DataFrame | None = None) -> None:
+        """All stages in order. `reactions` and `item_metadata` are what a dataset records beyond its interactions, if anything."""
+        self.prepare_data(raw_events, reactions)
         self.pretrain_policy()
         self.train_reward_models()
         self.compare_baselines()
@@ -411,18 +438,20 @@ class Experiment:
         self.sweep_relative_reward()
         self.compare_list_reward()
         self.ablate_sequence_credit()
+        self.compare_feedback_masking()
         self.analyse_multistep()
+        self.analyse_users_and_items(item_metadata)
 
     # ---- stage 1: data -------------------------------------------------------------------------------
 
     @_timed
-    def prepare_data(self, raw_events: pl.DataFrame) -> pd.Series:
-        """Builds the interaction log from raw events (see `gptrec.data.preprocess`) and summarises it."""
+    def prepare_data(self, raw_events: pl.DataFrame, reactions: pl.DataFrame | None = None) -> pd.Series:
+        """Builds the interaction log from raw events and, where the dataset has them, likes and dislikes (see `gptrec.data.preprocess`), and summarises it."""
         log_is_complete = (self.log_directory / "split.json").exists()
         if not log_is_complete:
             if self.config.max_users is not None:
                 raw_events = _events_of_first_users(raw_events, self.config.max_users)
-            build_interaction_log(raw_events, self.config.preprocessing).save(self.log_directory)
+            build_interaction_log(raw_events, self.config.preprocessing, reactions).save(self.log_directory)
         self.reports.figure("feedback_overview", plots.feedback_overview(self.log))
         return self.reports.table("data_summary", _log_summary(self.log))
 
@@ -456,15 +485,7 @@ class Experiment:
         "train" will produce the rewards during RL. "heldout" never influences the policy and only judges it:
         a reward gain that "heldout" does not confirm is exploitation of the errors of "train".
         """
-        training = RewardModelTrainingConfig(
-            self.config.transformer, self.config.reward_model_optimization, self.config.window_stride, loss_weights=self.config.reward_model_loss
-        )
-        all_users = np.arange(self.log.num_users)
-        for name, users in {"train": all_users[all_users % 2 == 0], "heldout": all_users[all_users % 2 == 1]}.items():
-            if not self._reward_model_path(name).exists():
-                reward_model, history = train_reward_model(self.log, training, self.device, users=users)
-                save_model(reward_model, self._reward_model_path(name))
-                self.reports.table(f"reward_model_{name}_training", pd.DataFrame(history).set_index("epoch"))
+        self._train_reward_model_pair("", self._reward_model_training())
 
         test_windows = EventWindows.for_heldout(self.log, "test", self.config.transformer.max_positions)
         predictions = {
@@ -473,6 +494,7 @@ class Experiment:
         }
         items = self.log.items
         self.reports.table("reward_model_retention", self._retention_quality(test_predictions=predictions))
+        self.reports.table("reward_model_reactions", pd.concat({name: reaction_quality(predicted) for name, predicted in predictions.items()}, names=["reward model", "signal"]))
         self.reports.table("reward_model_choice", pd.DataFrame({name: choice_quality(predicted) for name, predicted in predictions.items()}).T)
         # Which signals differ between the items a user could be shown, and which of them know about relevance.
         self.reports.table("reward_signal_spread", signal_spread_over_candidates(self._scored_test_candidates, self.examples("test").future_items))
@@ -660,7 +682,7 @@ class Experiment:
             if self._sweep_checkpoint(run_name).exists():
                 policy = load_policy(self._sweep_checkpoint(run_name), self.device)
                 predicted_reward[run_name] = {
-                    mode.value: self._evaluate(policy, "test", simulated_feedback=mode).metrics["predicted/heldout/played_ratio"] for mode in SimulatedFeedback
+                    mode.value: self._evaluate(policy, "test", simulated_feedback=mode).metrics["predicted/heldout/played_ratio"] for mode in SIMULATION_ASSUMPTIONS
                 }
         by_assumption = pd.DataFrame(predicted_reward).T.rename_axis("fine-tuning run").rename_axis("feedback assumed when judging", axis=1)
         self.reports.table("simulated_feedback_cross_judged", by_assumption)
@@ -750,16 +772,34 @@ class Experiment:
         come back for another one. Each figure puts relevance against one signal as the held-out reward model
         predicts it, one line per reward running from the strongest anchor to the weakest.
         """
+        anchor_weights = sorted(self.config.reward_kl_weights, reverse=True)
         runs_by_reward = {
-            reward_name: {f"{reward_name}, kl={weight}": self.config.sweep_run(reward, weight) for weight in sorted(self.config.reward_kl_weights, reverse=True)}
+            reward_name: {f"{reward_name}, kl={weight}": self.config.sweep_run(reward, weight) for weight in anchor_weights}
             for reward_name, reward in self.config.rewards
+        }
+        # A reward paid only after the last item reaches the earlier items through the return alone; without
+        # sequence credit they learn nothing, so here the credit ablation is expected to fail.
+        runs_by_reward |= {
+            f"{reward_name}, discount=0": {f"{reward_name}, discount=0, kl={weight}": self.config.sweep_run(reward, weight, discount=0.0) for weight in anchor_weights}
+            for reward_name, reward in self.config.rewards
+            if reward.rewards_the_end_of_the_list
         }
         metrics = self._sweep("reward_sweep", {name: run for runs in runs_by_reward.values() for name, run in runs.items()})
         curves = {"played ratio": self._generated_lists_of(self._kl_sweep_runs)}
         curves |= {reward_name: self._generated_lists_of(runs) for reward_name, runs in runs_by_reward.items()}
         curves["pretrained"] = {"pretrained": self._pretrained_lists}
-        self._trade_off_figures("reward_sweep", curves, signals=JUDGED_SIGNALS)
+        self._trade_off_figures("reward_sweep", curves, signals=(*JUDGED_SIGNALS, *self._signals_rewarded_by(reward for _, reward in self.config.rewards)))
         return metrics.reindex(self._summary_rows)
+
+    @staticmethod
+    def _signals_rewarded_by(rewards) -> tuple[str, ...]:
+        """The predicted signals, beyond JUDGED_SIGNALS, that some of `rewards` pay for."""
+        signals = []
+        for reward in rewards:
+            signals += ["liked"] if reward.liked_weight or reward.disliked_weight else []
+            signals += ["adopts"] if reward.adoption_weight else []
+            signals += ["returns_after_list"] if reward.rewards_the_end_of_the_list else []
+        return tuple(dict.fromkeys(signals))
 
     @_timed
     def sweep_relevance_in_reward(self) -> pd.DataFrame:
@@ -931,12 +971,30 @@ class Experiment:
         # If the predicted reward of later positions depends on what the reward model is told about the
         # generated items, the multi-step estimate is an artefact of the simulation.
         predicted_by_mode = {}
-        for mode in SimulatedFeedback:
+        for mode in SIMULATION_ASSUMPTIONS:
             evaluation = self._evaluate(self.rl_policy, "test", simulated_feedback=mode)
             predicted_by_mode[mode.value] = per_step_table(evaluation, examples, items)["predicted_played_ratio/train"]
         predicted_by_mode = self.reports.table("per_step_by_simulated_feedback", pd.DataFrame(predicted_by_mode))
         by_mode_figure = plots.series_per_panel({"predicted played ratio (RL policy)": predicted_by_mode}, x_label="position in the generated list")
         self.reports.figure("per_step_by_simulated_feedback", by_mode_figure)
+
+        # A generated item the user never consumed is part of the context of the items after it; a ranked list has no such context.
+        lists = {f"{name}, {kind}": lists for name, evaluation in evaluations.items() for kind, lists in (("ranked", evaluation.top_k), ("generated", evaluation.generated.actions))}
+        self.reports.table("position_hits", position_hits(lists, examples.future_items))
+
+        # Which assumption about the response to an item nobody consumed agrees with what users did, on their real next items.
+        reward_models = {"train": self.reward_models["train"]}
+        if self._reward_model_path("masked_train").exists():
+            reward_models["masked train"] = self.masked_reward_models["masked_train"]
+        # A history leaves room for a list of `horizon` items, so no more real items than that fit after it.
+        steps = min(FEEDBACK_ASSUMPTION_STEPS, self.config.horizon)
+        assumptions = {}
+        for name, reward_model in reward_models.items():
+            modes = [SimulatedFeedback.LOGGED, *SIMULATION_ASSUMPTIONS] + ([SimulatedFeedback.UNKNOWN] if reward_model.config.unknown_feedback else [])
+            assumptions[name] = feedback_assumptions_on_real_sequences(
+                reward_model, examples, modes, steps, self.config.evaluation_batch_size, self.device, mixed_precision=True
+            )
+        self.reports.table("feedback_assumptions_on_real_sequences", pd.concat(assumptions, axis=1, names=["reward model", "quantity"]))
 
         generation_gap = pd.DataFrame({
             (name, list_name): {k: evaluation.metrics[f"{list_name}/all/ndcg@{k}"] for k in self.config.ks}
@@ -944,6 +1002,103 @@ class Experiment:
             for list_name in ("top_k", "next_k")
         }).rename_axis("k")
         return self.reports.table("ndcg_top_k_vs_next_k", generation_gap)
+
+    @_timed
+    def compare_feedback_masking(self) -> pd.DataFrame:
+        """A reward model that can be told "the response to this item is unknown", against models that must be told an assumed one.
+
+        The masked reward models are trained like the others, on the same halves of the users, except that in a
+        share of the training windows the responses to the last events are hidden (see `hide_last_responses`).
+        A generated item can then be appended as what it is, shown with an unknown response, and the simulation
+        needs no assumption. The policy is fine-tuned against the masked training model with unknown feedback and
+        judged like every other run; the runs of the anchor sweep are also judged by the masked held-out model.
+        """
+        anchor_weights = sorted(self.config.masked_feedback_kl_weights, reverse=True)
+        if not anchor_weights:
+            return pd.DataFrame()
+        masked = self.masked_reward_models
+        test_windows = EventWindows.for_heldout(self.log, "test", self.config.transformer.max_positions)
+        quality = {
+            name: reward_model_report(predict_heldout_feedback(reward_model, test_windows, self.config.evaluation_batch_size, self.device), self.log.items).loc["reward model"]
+            for name, reward_model in (self.reward_models | masked).items()
+        }
+        self.reports.table("reward_model_masked_quality", pd.DataFrame(quality).T)
+
+        runs = {
+            f"unknown feedback, kl={weight}": self.config.sweep_run(self.config.rl.reward, weight, simulated_feedback=SimulatedFeedback.UNKNOWN)
+            for weight in anchor_weights
+        }
+        metrics = self._sweep("masked_feedback_sweep", runs, reward_model=masked["masked_train"])
+
+        judged_by_masked_model = {}
+        for run_name in ["pretrained", *self._kl_sweep_runs, *runs]:
+            if run_name == "pretrained" or self._sweep_checkpoint(run_name).exists():
+                policy = self.pretrained_policy if run_name == "pretrained" else load_policy(self._sweep_checkpoint(run_name), self.device)
+                evaluation = self._evaluate(policy, "test", reward_models={"masked_heldout": masked["masked_heldout"]}, simulated_feedback=SimulatedFeedback.UNKNOWN)
+                judged_by_masked_model[run_name] = {
+                    "predicted played ratio, unknown feedback": evaluation.metrics["predicted/masked_heldout/played_ratio"],
+                    "predicted played ratio, expected feedback": self._sweep_or_pretrained_metric(run_name, "predicted/heldout/played_ratio"),
+                }
+        self.reports.table("masked_feedback_judged", pd.DataFrame(judged_by_masked_model).T)
+        return metrics.reindex(self._summary_rows)
+
+    def _sweep_or_pretrained_metric(self, run_name: str, metric: str) -> float:
+        evaluation = self._test_evaluation("pretrained", self.pretrained_policy) if run_name == "pretrained" else self._sweep_evaluation(run_name)
+        return evaluation.metrics[metric]
+
+    @_timed
+    def analyse_users_and_items(self, item_metadata: pl.DataFrame | None = None) -> pd.DataFrame:
+        """Who loses relevance, what the policy learned about items, and how impressions spread over the catalogue.
+
+        Users are grouped by how many events they had before the request. The logit shift asks whether the
+        fine-tuned policy changed its preferences per user or one item at a time. With `item_metadata` (item_id
+        plus attributes such as the title and whether it is a film or a series), the items that gained and lost
+        the most impressions are named. Returns the logit-shift table: one row per fine-tuned policy.
+        """
+        examples, items, k = self.examples("test"), self.log.items, max(self.config.ks)
+        pretrained, rl = self._test_evaluation("pretrained", self.pretrained_policy), self._test_evaluation("rl", self.rl_policy)
+        user_starts = np.asarray(self.log.user_offsets[:-1])
+        test_starts, _ = self.log.period_rows("test")
+        users = examples.user.numpy()
+        prior_events = test_starts[users] - user_starts[users]
+        main_lists = {"pretrained, ranked": pretrained.top_k, "pretrained, generated": pretrained.generated.actions, "RL, generated": rl.generated.actions}
+        by_length = relevance_by_history_length(main_lists, examples, prior_events, k, self.config.evaluation_config().liked_threshold)
+        self.reports.table("relevance_by_history_length", by_length)
+
+        policies = {"RL": self.rl_policy} | {name: load_policy(self._sweep_checkpoint(name), self.device) for name in self._kl_sweep_runs if self._sweep_checkpoint(name).exists()}
+        shift = pd.DataFrame({
+            name: logit_shift_by_item(policy, self.pretrained_policy, examples, items, self.config.evaluation_batch_size, self.device) for name, policy in policies.items()
+        }).T
+        self.reports.table("logit_shift_by_item", shift)
+
+        swept_lists = {name: self._sweep_evaluation(name).generated.actions for name in self._kl_sweep_runs if self._sweep_checkpoint(name).exists()}
+        all_lists = main_lists | swept_lists
+        self.reports.table("exposure_lorenz", exposure_lorenz(all_lists, items.num_items))
+        concentration = {
+            name: {"catalog_coverage": profile["catalog_coverage"], "item_gini": profile["item_gini"], "top_exposure_share": profile["top_exposure_share"]}
+            for name, lists in all_lists.items()
+            for profile in [recommendation_profile(lists, examples.history.items, items)]
+        }
+        self.reports.table("exposure_concentration", pd.DataFrame(concentration).T)
+
+        if item_metadata is not None:
+            item_table = self._item_table(item_metadata)
+            if "content_type" in item_table:
+                self.reports.table("impressions_by_content_type", impressions_by_attribute(all_lists, item_table["content_type"].to_numpy()))
+            self.reports.table("largest_impression_changes", largest_impression_changes(pretrained.generated.actions, rl.generated.actions, item_table))
+        return shift
+
+    def _item_table(self, item_metadata: pl.DataFrame) -> pd.DataFrame:
+        """One row per item token (row 0 is padding): the attributes of `item_metadata` next to the log's statistics of the item."""
+        items = self.log.items
+        tokens = pd.DataFrame({
+            "item_id": items.raw_id,
+            "train_popularity": items.train_popularity,
+            "mean_played_ratio": items.mean_played_ratio,
+            "duration_seconds": items.duration_seconds,
+        })
+        metadata = pd.DataFrame({column: item_metadata[column].to_numpy() for column in item_metadata.columns}).drop_duplicates("item_id")
+        return tokens.merge(metadata, on="item_id", how="left").set_axis(pd.RangeIndex(len(tokens), name="item_token"))
 
     # ---- what the stages share -----------------------------------------------------------------------
 
@@ -962,6 +1117,25 @@ class Experiment:
     @cached_property
     def reward_models(self) -> dict[str, RewardModel]:
         return {name: load_reward_model(self._reward_model_path(name), self.device) for name in ("train", "heldout")}
+
+    @cached_property
+    def masked_reward_models(self) -> dict[str, RewardModel]:
+        """The two reward models that can read "unknown response" (see `compare_feedback_masking`), trained on first use."""
+        training = replace(self._reward_model_training(), hidden_response_share=self.config.hidden_response_share, max_hidden_responses=self.config.horizon)
+        self._train_reward_model_pair("masked_", training)
+        return {name: load_reward_model(self._reward_model_path(name), self.device) for name in ("masked_train", "masked_heldout")}
+
+    def _reward_model_training(self) -> RewardModelTrainingConfig:
+        return RewardModelTrainingConfig(self.config.transformer, self.config.reward_model_optimization, self.config.window_stride, loss_weights=self.config.reward_model_loss)
+
+    def _train_reward_model_pair(self, prefix: str, training: RewardModelTrainingConfig) -> None:
+        """Trains the reward models named <prefix>train and <prefix>heldout on disjoint halves of the users, unless they exist."""
+        all_users = np.arange(self.log.num_users)
+        for name, users in {f"{prefix}train": all_users[all_users % 2 == 0], f"{prefix}heldout": all_users[all_users % 2 == 1]}.items():
+            if not self._reward_model_path(name).exists():
+                reward_model, history = train_reward_model(self.log, training, self.device, users=users)
+                save_model(reward_model, self._reward_model_path(name))
+                self.reports.table(f"reward_model_{name}_training", pd.DataFrame(history).set_index("epoch"))
 
     def examples(self, period: Period) -> EvalExamples:
         """One recommendation request per user at the start of `period`."""
@@ -1154,6 +1328,9 @@ class Experiment:
             returns=torch.zeros_like(item_mean),
             is_chosen=torch.ones_like(item_mean),
             relative_ratio=torch.full_like(item_mean, 0.5),  # every item's mean relative ratio, by construction
+            liked=torch.zeros_like(item_mean),
+            disliked=torch.zeros_like(item_mean),
+            adopts=torch.zeros_like(item_mean),
         )
         return ScoredCandidates(candidates.items, candidates.log_probs, feedback, feedback)
 
@@ -1256,7 +1433,14 @@ class Experiment:
             "predicted/heldout/played_seconds",
             "predicted/heldout/session_continues",
             "predicted/heldout/returns",
+            "predicted/heldout/returns_after_list",
+            "predicted/heldout/liked",
+            "predicted/heldout/disliked",
+            "predicted/heldout/adopts",
+            "next_k/logged/liked_per_item",
+            "next_k/logged/adopted_per_item",
             "next_k/profile/catalog_coverage",
+            "next_k/profile/top_exposure_share",
             "next_k/profile/mean_user_pair_overlap",
             f"next_k/{INTRA_LIST_DISTANCE}",
             "next_k/profile/head_item_share",
@@ -1264,29 +1448,30 @@ class Experiment:
             "next_k/profile/history_repeat_rate",
         ]
 
-    def _sweep(self, report_name: str, runs: dict[str, RLConfig]) -> pd.DataFrame:
+    def _sweep(self, report_name: str, runs: dict[str, RLConfig], reward_model: RewardModel | None = None) -> pd.DataFrame:
         """Fine-tunes one policy per run and tabulates all test metrics, one column per run plus the base recommender.
 
-        Runs that no longer fit the time budget are left out of the table.
+        The policies learn from `reward_model`, by default the training reward model. Runs that no longer fit the
+        time budget are left out of the table.
         """
         evaluations = {"pretrained": self._test_evaluation("pretrained", self.pretrained_policy)}
         evaluations["pretrained"].metrics.setdefault(REALISED_KL, 0.0)
         for run_name, rl_config in runs.items():
-            if self._is_finetuned(run_name, rl_config):
+            if self._is_finetuned(run_name, rl_config, reward_model):
                 evaluations[run_name] = self._sweep_evaluation(run_name)
         if self.config.evaluate_sweeps_on_validation:
             on_validation = pd.DataFrame({run_name: self._metrics_on_validation(run_name) for run_name in evaluations})
             self.reports.table(f"{report_name}_validation", on_validation)
         return self.reports.table(report_name, metrics_table(evaluations))
 
-    def _is_finetuned(self, run_name: str, rl_config: RLConfig) -> bool:
+    def _is_finetuned(self, run_name: str, rl_config: RLConfig, reward_model: RewardModel | None = None) -> bool:
         """Trains the policy of a sweep run unless its checkpoint exists. False if there is no time left to train it."""
         path = self._sweep_checkpoint(run_name)
         if not path.exists():
             if not self._fits_time_budget(rl_config):
                 print(f"skipped the run '{run_name}': it would not finish inside the time budget")
                 return False
-            policy, records = self._run_rl(rl_config)
+            policy, records = self._run_rl(rl_config, reward_model=reward_model)
             save_model(policy, path)
             self.reports.table(f"sweep_training_{_file_name(run_name)}", pd.DataFrame(records).set_index("step"))
         return True
@@ -1294,10 +1479,11 @@ class Experiment:
     def _sweep_checkpoint(self, run_name: str) -> Path:
         return self.checkpoints / "sweep" / f"{_file_name(run_name)}.pt"
 
-    def _run_rl(self, rl_config: RLConfig, evaluate=None) -> tuple[NextItemPolicy, list[dict[str, float]]]:
+    def _run_rl(self, rl_config: RLConfig, evaluate=None, reward_model: RewardModel | None = None) -> tuple[NextItemPolicy, list[dict[str, float]]]:
         """One RL fine-tuning of the base recommender, timed so that later runs can be checked against the time budget."""
         started = time.monotonic()
-        policy, records = finetune_with_rl(self.pretrained_policy, self.reward_models["train"], self.log, rl_config, self.device, evaluate=evaluate)
+        reward_model = self.reward_models["train"] if reward_model is None else reward_model
+        policy, records = finetune_with_rl(self.pretrained_policy, reward_model, self.log, rl_config, self.device, evaluate=evaluate)
         self._seconds_per_rl_step = (time.monotonic() - started) / rl_config.num_steps
         return policy, records
 
@@ -1353,12 +1539,16 @@ def _log_summary(log: InteractionLog) -> pd.Series:
         "share of events after which the user returns": _rate_where_known(log.returns, log.returns_known),
         "share of events whose return outcome is known": float(np.mean(log.returns_known)),
         "share of organic events": float(np.mean(log.is_organic)),
+        "share of events the user liked": _rate_where_known(log.liked, log.reactions_known),
+        "share of events the user disliked": _rate_where_known(log.disliked, log.reactions_known),
+        "share of first events with an item that the user came back to": _rate_where_known(log.adopts, log.adopts_known),
     })
 
 
 def _rate_where_known(signal: np.ndarray, is_known: np.ndarray) -> float:
-    """How often a retention signal is true among the events whose outcome the log knows."""
-    return float(np.asarray(signal)[np.asarray(is_known)].mean())
+    """How often a signal is true among the events whose outcome the log knows; NaN where it knows none."""
+    is_known = np.asarray(is_known)
+    return float(np.asarray(signal)[is_known].mean()) if is_known.any() else float("nan")
 
 
 def _decile(values_per_item: np.ndarray) -> np.ndarray:

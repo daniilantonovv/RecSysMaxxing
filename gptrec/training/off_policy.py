@@ -94,6 +94,9 @@ def _logged_rewards(batch: EventBatch, reward_function: RewardFunction) -> Tenso
         returns=batch.returns * batch.returns_known,
         is_chosen=torch.ones_like(batch.played_ratio),
         relative_ratio=batch.relative_ratio,
+        liked=batch.liked * batch.reactions_known,
+        disliked=batch.disliked * batch.reactions_known,
+        adopts=batch.adopts * batch.adopts_known,
     )
     return reward_function(logged, batch.items)
 

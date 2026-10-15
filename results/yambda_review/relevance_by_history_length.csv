@@ -1,0 +1,5 @@
+,num_users,"pretrained, ranked/ndcg@10","pretrained, ranked/logged_played_ratio_per_item","pretrained, generated/ndcg@10","pretrained, generated/logged_played_ratio_per_item","RL, generated/ndcg@10","RL, generated/logged_played_ratio_per_item"
+50 to 1077 events,1897.0000,0.1164,0.0618,0.1147,0.0605,0.1165,0.0613
+1077 to 2961 events,1899.0000,0.1179,0.0694,0.1236,0.0744,0.1237,0.0767
+2961 to 6421 events,1898.0000,0.1110,0.0645,0.1158,0.0657,0.1162,0.0673
+6421 to 25401 events,1899.0000,0.1101,0.0623,0.1150,0.0672,0.1159,0.0682

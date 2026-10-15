@@ -1,0 +1,14 @@
+,minutes
+prepare_data,0.0539 ± 0.0695
+pretrain_policy,3.6761 ± 0.0068
+train_reward_models,5.1371 ± 0.0043
+finetune,17.6643 ± 0.0078
+sweep_kl_weight,25.9396 ± 0.0108
+sweep_kl_budget,6.3161 ± 0.0021
+compare_advantage_estimators,10.1962 ± 0.0010
+explain_reward_gain,6.2786 ± 0.0002
+compare_alternatives_to_rl,2.1559 ± 0.0002
+sweep_relevance_in_reward,12.6428 ± 0.0064
+sweep_personal_rewards,3.1413 ± 0.0002
+sweep_relative_reward,9.4565 ± 0.0008
+ablate_sequence_credit,9.7572 ± 0.0013

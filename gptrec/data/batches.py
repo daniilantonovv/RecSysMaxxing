@@ -42,6 +42,8 @@ class EvalExamples(TensorGroup):
     future_played_ratio: Tensor  # float [U, M]
     future_relative_ratio: Tensor  # float [U, M], the played ratio as a quantile among the item's train-period events
     future_is_organic: Tensor  # bool [U, M], the user picked the item themselves (it was not recommended)
+    future_liked: Tensor  # bool [U, M], the user liked the item after consuming it
+    future_adopts: Tensor  # bool [U, M], the event was the user's first with the item, and the user came back to it
     user: Tensor  # long [U], user index in the interaction log
 
     def batches(self, batch_size: int) -> Iterator[EvalExamples]:
@@ -60,6 +62,11 @@ class EventBatch(TensorGroup):
     returns: Tensor  # float [B, L]
     session_continues_known: Tensor  # bool [B, L], False where the observed data ends too soon to tell
     returns_known: Tensor  # bool [B, L]
+    liked: Tensor  # float [B, L], the user liked the item after consuming it
+    disliked: Tensor  # float [B, L]
+    reactions_known: Tensor  # bool [B, L], False where the dataset records no reactions or the log ends too soon to tell
+    adopts: Tensor  # float [B, L], the user's first event with the item, and the user came back to it later
+    adopts_known: Tensor  # bool [B, L], False for later events of an item, and where the log ends too soon to tell
     is_organic: Tensor  # bool [B, L], the user picked the item themselves (it was not recommended)
     is_target: Tensor  # bool [B, L], events to learn from or score; the others only provide context
 
@@ -115,6 +122,10 @@ def _examples(log: InteractionLog, users: np.ndarray, future_starts: np.ndarray,
         future_played_ratio=torch.from_numpy(gather_right_padded(log.played_ratio, future_starts, future_ends, max_future, 0.0)).float(),
         future_relative_ratio=torch.from_numpy(gather_right_padded(log.relative_ratio, future_starts, future_ends, max_future, 0.0)).float(),
         future_is_organic=torch.from_numpy(gather_right_padded(log.is_organic, future_starts, future_ends, max_future, True)),
+        future_liked=torch.from_numpy(gather_right_padded(log.liked, future_starts, future_ends, max_future, False)),
+        future_adopts=torch.from_numpy(
+            gather_right_padded(log.adopts, future_starts, future_ends, max_future, False) & gather_right_padded(log.adopts_known, future_starts, future_ends, max_future, False)
+        ),
         user=torch.from_numpy(users).long(),
     )
 
@@ -223,6 +234,11 @@ class EventWindows:
             returns=gather(self._log.returns, False).float(),
             session_continues_known=gather(self._log.session_continues_known, False),
             returns_known=gather(self._log.returns_known, False),
+            liked=gather(self._log.liked, False).float(),
+            disliked=gather(self._log.disliked, False).float(),
+            reactions_known=gather(self._log.reactions_known, False),
+            adopts=gather(self._log.adopts, False).float(),
+            adopts_known=gather(self._log.adopts_known, False),
             is_organic=gather(self._log.is_organic, False),
             is_target=torch.from_numpy(is_target),
         )

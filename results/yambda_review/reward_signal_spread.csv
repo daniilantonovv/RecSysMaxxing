@@ -1,0 +1,11 @@
+,spread_between_candidates,spread_between_users,relevance_auc
+played_ratio,0.0589,0.2411,0.5318
+session_continues,0.0073,0.0190,0.4880
+returns,0.0143,0.1301,0.5069
+is_chosen,0.1581,0.1029,0.6045
+relative_ratio,0.0453,0.1362,0.5237
+liked,0.0028,0.0134,0.4835
+disliked,0.0007,0.0022,0.4469
+adopts,0.0771,0.1645,0.5621
+chosen_played_ratio,0.1287,0.2168,0.5719
+recommender_log_prob,0.7784,0.8046,0.6551

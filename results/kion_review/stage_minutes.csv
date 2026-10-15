@@ -1,0 +1,10 @@
+,minutes
+prepare_data,0.1040
+pretrain_policy,4.1327
+train_reward_models,5.0675
+finetune,17.8990
+sweep_kl_weight,26.2137
+sweep_rewards,25.5601
+compare_feedback_masking,18.0657
+analyse_multistep,2.1040
+analyse_users_and_items,0.0098

@@ -1,0 +1,7 @@
+,"predicted played ratio, unknown feedback","predicted played ratio, expected feedback"
+pretrained,0.6877,0.5962
+kl=0.05,0.7080,0.6193
+kl=0.1,0.7007,0.6114
+kl=0.3,0.6939,0.6044
+"unknown feedback, kl=0.3",0.6938,0.6031
+"unknown feedback, kl=0.1",0.7082,0.6137

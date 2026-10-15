@@ -1,0 +1,21 @@
+#table(
+  columns: (1fr, auto, auto, auto),
+  align: (left, right, right, right),
+  stroke: none,
+  inset: (x: 4pt, y: 2.8pt),
+  table.hline(stroke: 0.8pt),
+  table.header(
+    [], strong[Between candidates], strong[Between users], strong[Relevance AUC],
+  ),
+  table.hline(stroke: 0.4pt),
+  table.cell(colspan: 4, align: left, emph[KION]),
+  [Consumed share], [0.144], [0.153], [0.537],
+  [Return], [0.033], [0.125], [0.543],
+  table.hline(stroke: 0.4pt),
+  table.cell(colspan: 4, align: left, emph[Yambda]),
+  [Consumed share], [0.059], [0.241], [0.532],
+  [Return], [0.014], [0.130], [0.507],
+  [Like], [0.003], [0.013], [0.483],
+  [Adoption], [0.077], [0.165], [0.562],
+  table.hline(stroke: 0.8pt),
+)

@@ -137,14 +137,14 @@ from dataclasses import replace
 import pandas as pd
 
 from gptrec.baselines.suite import BaselineConfig
-from gptrec.data.datasets import download_raw_data, load_raw_events
+from gptrec.data.datasets import download_raw_data, download_side_data, load_item_metadata, load_raw_events, load_reactions
 from gptrec.data.preprocess import PreprocessingConfig
-from gptrec.experiment import DEFAULT_REWARDS, Experiment, ExperimentConfig, reuse_artifacts, run_smoke_test
+from gptrec.experiment import ADOPTION, DEFAULT_REWARDS, LIKES, RETURN_AFTER_THE_LIST, Experiment, ExperimentConfig, reuse_artifacts, run_smoke_test
 from gptrec.models.backbone import TransformerConfig
 from gptrec.rollout import GenerationConfig
 from gptrec.seeds import run_seeds, run_seeds_smoke_test, summarise_seeds
 from gptrec.training.rl import RLConfig
-from gptrec.training.supervised import OptimizationConfig
+from gptrec.training.supervised import FeedbackLossWeights, OptimizationConfig
 
 SECONDS_PER_DAY = 86_400
 
@@ -152,6 +152,13 @@ SECONDS_PER_DAY = 86_400
 def show(table):
     with pd.option_context("display.max_rows", None, "display.max_columns", None, "display.float_format", "{:.4f}".format):
         display(table)
+
+
+def show_report(name, **read_options):
+    path = experiment.reports.directory / f"{name}.csv"
+    if path.exists():
+        print(name)
+        show(pd.read_csv(path, **read_options))
 """)
 
 CHOOSE_DATASET = code("""
@@ -167,7 +174,7 @@ SMOKE_TEST = [
 All stages on a subsample of users, with small models and a few optimisation steps.
 """),
     code("""
-run_smoke_test(raw_events, config, WORKING / "smoke_test" / DATASET, device, max_users=SMOKE_TEST_USERS[DATASET])
+run_smoke_test(raw_events, config, WORKING / "smoke_test" / DATASET, device, max_users=SMOKE_TEST_USERS[DATASET], reactions=reactions, item_metadata=item_metadata)
 shutil.rmtree(WORKING / "smoke_test")
 """),
 ]
@@ -191,7 +198,7 @@ evaluation.
 """),
     code("""
 experiment = Experiment(config, HOME, device, time_budget_hours=TIME_BUDGET_HOURS)
-summary = experiment.prepare_data(raw_events)
+summary = experiment.prepare_data(raw_events, reactions)
 del raw_events
 show(summary)
 """),
@@ -550,7 +557,18 @@ what $\beta$ means, so only the budget runs compare policies that moved equally 
 show(experiment.ablate_sequence_credit())
 """),
     markdown(r"""
-## 18. Multi-step generation
+## 18. Feedback the reward model is told it does not know
+
+A second pair of reward models learns with the responses to the last events of some training windows hidden, so
+that a generated item can be appended as "shown, response unknown" instead of with an assumed response.
+"""),
+    code("""
+show(experiment.compare_feedback_masking())
+show_report("reward_model_masked_quality", index_col=0)
+show_report("masked_feedback_judged", index_col=0)
+"""),
+    markdown(r"""
+## 19. Multi-step generation
 
 For each list position $k$: the probability that $a_k \in F$, the entropy of $\pi_\theta(\cdot \mid s_k)$, the
 predicted signals, and the disagreement $|\hat\rho^{\,\text{train}}_k - \hat\rho^{\,\text{held-out}}_k|$ between the two
@@ -563,6 +581,20 @@ The table gives NDCG@k of top-K and next-K lists before and after fine-tuning.
 """),
     code("""
 show(experiment.analyse_multistep())
+show_report("position_hits", index_col=0)
+show_report("feedback_assumptions_on_real_sequences", header=[0, 1], index_col=0)
+"""),
+    markdown(r"""
+## 20. Users and items
+
+Relevance for users with short and long histories, whether fine-tuning shifted the policy one item at a time, and
+how impressions spread over the catalogue.
+"""),
+    code("""
+show(experiment.analyse_users_and_items(item_metadata))
+for report in ["relevance_by_history_length", "exposure_concentration", "impressions_by_content_type"]:
+    show_report(report, index_col=0)
+show_report("largest_impression_changes", index_col=[0, 1])
 """),
     markdown("""
 ## Reports
@@ -768,6 +800,22 @@ CONFIGS = {
         diversity_weights=(1.0,),
         diversity_kl_weights=(0.1,),
     ),
+    ("kion", "review"): replace(
+        KION,
+        kl_weights=(0.0, 0.1, 0.3, 1.0),
+        rewards=(("return after the list", RETURN_AFTER_THE_LIST),),
+        reward_kl_weights=(0.1, 0.3),
+        masked_feedback_kl_weights=(0.1, 0.3),
+    ),
+    ("yambda", "review"): replace(
+        YAMBDA,
+        preprocessing=replace(YAMBDA.preprocessing, adoption_window_seconds=14 * SECONDS_PER_DAY),
+        reward_model_loss=FeedbackLossWeights(liked=0.25, disliked=0.25, adopts=0.25),
+        kl_weights=(0.05, 0.1, 0.3),
+        rewards=(("likes", LIKES), ("adoption", ADOPTION), ("return after the list", RETURN_AFTER_THE_LIST)),
+        reward_kl_weights=(0.1, 0.3),
+        masked_feedback_kl_weights=(0.1, 0.3),
+    ),
     ("yambda", "seeds"): replace(
         YAMBDA,
         kl_weights=(0.03, 0.1),
@@ -811,6 +859,8 @@ if missing:
         CHOOSE_DATASET,
         code("""
 raw_events = load_raw_events(DATASET, download_raw_data(DATASET))
+side_data = download_side_data(DATASET)
+reactions, item_metadata = load_reactions(DATASET, side_data), load_item_metadata(DATASET, side_data)
 print(f"{len(raw_events):,} raw events")
 """),
         *SMOKE_TEST,
@@ -823,8 +873,9 @@ def prepare_offline_bundle() -> list[dict]:
         markdown("""
 # Offline bundle
 
-The package source, the wheels of its dependencies and both datasets in one directory, with the result of a smoke
-test of the pipeline on each dataset.
+The wheels of the package's dependencies and both datasets in one directory: the interactions, Yambda's likes and
+dislikes, and KION's item table. The training notebooks carry their own copy of the code and smoke-test it on
+their GPU before they start.
 """),
         code("""
 DOWNLOAD_TORCH = False
@@ -849,36 +900,13 @@ import os
 os.environ["GPTREC_HOME"] = str(BUNDLE_DIR)
 sys.path.insert(0, str(SOURCE_DIR))
 
-from gptrec.data.datasets import DATASETS, download_raw_data
+from gptrec.data.datasets import DATASETS, download_raw_data, download_side_data
 
 raw_data_paths = {dataset: download_raw_data(dataset) for dataset in DATASETS}
-for dataset, path in raw_data_paths.items():
-    print(dataset, path, f"{path.stat().st_size / 2**20:.0f} MB")
-"""),
-        markdown("""
-## Smoke test
-
-All stages of each dataset's pipeline on a subsample of users, with small models and a few optimisation steps.
-"""),
-        IMPORTS,
-        OFFLINE_CONFIGS,
-        code(f"""
-import traceback
-
-import torch
-
-smoke_test_results = {{}}
+side_data_paths = {dataset: download_side_data(dataset) for dataset in DATASETS}
 for dataset in DATASETS:
-    try:
-        smoke_test_events = load_raw_events(dataset, raw_data_paths[dataset])
-        smoke_test_home = Path("{WORKING}/smoke_test") / dataset
-        run_smoke_test(smoke_test_events, CONFIGS[(dataset, "final")], smoke_test_home / "experiment", torch.device("cpu"), max_users=SMOKE_TEST_USERS[dataset])
-        run_seeds_smoke_test(smoke_test_events, CONFIGS[(dataset, "seeds")], smoke_test_home / "seeds", torch.device("cpu"), max_users=SMOKE_TEST_USERS[dataset])
-        smoke_test_results[dataset] = "passed"
-    except Exception:
-        smoke_test_results[dataset] = "FAILED\\n" + traceback.format_exc()
-    print(f"smoke test on {{dataset}}:", smoke_test_results[dataset])
-shutil.rmtree("{WORKING}/smoke_test", ignore_errors=True)
+    for name, path in {"interactions": raw_data_paths[dataset], **side_data_paths[dataset]}.items():
+        print(dataset, name, path, f"{path.stat().st_size / 2**20:.0f} MB")
 """),
         markdown("## Manifest"),
         code("""
@@ -886,16 +914,14 @@ import json
 
 manifest = {
     "raw_data": {dataset: os.path.relpath(path, BUNDLE_DIR) for dataset, path in raw_data_paths.items()},
+    "side_data": {dataset: {name: os.path.relpath(path, BUNDLE_DIR) for name, path in paths.items()} for dataset, paths in side_data_paths.items()},
     "wheels": sorted(path.name for path in WHEELS_DIR.iterdir()),
-    "smoke_tests": smoke_test_results,
     "python": sys.version,
 }
 (BUNDLE_DIR / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
 bundle_bytes = sum(path.stat().st_size for path in BUNDLE_DIR.rglob("*") if path.is_file())
 print(f"bundle: {bundle_bytes / 2**30:.2f} GB in {BUNDLE_DIR}")
-for dataset, result in smoke_test_results.items():
-    print(f"smoke test on {dataset}:", result.splitlines()[0])
 """),
     ]
 
@@ -919,8 +945,7 @@ assert manifests, "gptrec_bundle not found under /kaggle/input"
 BUNDLE_DIR = manifests[0].parent
 manifest = json.loads((BUNDLE_DIR / "manifest.json").read_text())
 print("bundle:", BUNDLE_DIR)
-for dataset, result in manifest["smoke_tests"].items():
-    print(f"smoke test on {{dataset}}:", result.splitlines()[0])
+print("side data:", {{dataset: sorted(paths) for dataset, paths in manifest.get("side_data", {{}}).items()}})
 
 WORKING = Path("{WORKING}")
 os.environ.update(GPTREC_HOME=str(WORKING), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
@@ -959,7 +984,10 @@ else:
 
 LOAD_BUNDLED_EVENTS = code("""
 raw_events = load_raw_events(DATASET, BUNDLE_DIR / manifest["raw_data"][DATASET])
-print(f"{len(raw_events):,} raw events")
+side_data = {name: BUNDLE_DIR / path for name, path in manifest.get("side_data", {}).get(DATASET, {}).items()}
+reactions = load_reactions(DATASET, side_data) if side_data else None
+item_metadata = load_item_metadata(DATASET, side_data) if side_data else None
+print(f"{len(raw_events):,} raw events; beyond them: {sorted(side_data) or 'nothing'}")
 """)
 
 
@@ -1055,10 +1083,123 @@ sorted(path.name for path in (archive / "over_seeds").iterdir())
     ]
 
 
+REVIEW_SESSIONS = {"5_review_kion.ipynb": "kion", "5_review_yambda.ipynb": "yambda"}
+
+
+def review_offline(dataset: str) -> list[dict]:
+    """The analyses and runs that answer the review: rewards for likes, adoption and the return after the list,
+    a reward model that can be told a response is unknown, and what fine-tuning does along the list, to users
+    with little history and to single items."""
+    return [
+        ABSTRACT,
+        markdown("""
+This session trains the base models again, from the same seed, and adds what the earlier sessions left open:
+
+- long-term rewards: the return after the last item of the list, which only credit along the list can reach,
+  and on Yambda likes minus dislikes and coming back to a new track;
+- a pair of reward models that can be told "the response to this item is unknown", so that a simulation of a
+  generated list needs no assumption about it, and a check of every assumption against users' real next items;
+- along the list: the hit rate of each position after a miss and after a hit, generated against ranked lists;
+- across users and items: relevance by history length, whether the policy shifted one item at a time, how
+  impressions spread over the catalogue and, on KION, which films and series gained and lost.
+"""),
+        *package_source_cells(f"{WORKING}/src"),
+        markdown("## Setup"),
+        OFFLINE_SETUP,
+        CHECK_HARDWARE,
+        IMPORTS,
+        markdown("## Configuration"),
+        OFFLINE_CONFIGS,
+        code(f"""
+DATASET = "{dataset}"
+SESSION = "review"
+config = CONFIGS[(DATASET, SESSION)]
+HOME = WORKING / f"{{DATASET}}_{{SESSION}}"
+TIME_BUDGET_HOURS = 11.0
+"""),
+        LOAD_BUNDLED_EVENTS,
+        code("""
+assert side_data, "this bundle has no likes, dislikes or item table: re-run notebook 2 and attach its new version"
+"""),
+        *SMOKE_TEST,
+        markdown("## 1. Data"),
+        code("""
+experiment = Experiment(config, HOME, device, time_budget_hours=TIME_BUDGET_HOURS)
+summary = experiment.prepare_data(raw_events, reactions)
+del raw_events
+show(summary)
+"""),
+        markdown("## 2. Base recommender"),
+        code("""
+show(experiment.pretrain_policy())
+"""),
+        markdown("""
+## 3. Reward models
+
+How well each head predicts held-out events, and how much each predicted signal varies between one user's
+candidates against between users: a signal that hardly differs between a user's candidates gives a policy
+little to choose by.
+"""),
+        code("""
+show(experiment.train_reward_models())
+show_report("reward_model_reactions", index_col=[0, 1])
+show_report("reward_model_retention", index_col=[0, 1, 2])
+show_report("reward_signal_spread", index_col=0)
+"""),
+        markdown("## 4. Main fine-tuning run"),
+        code("""
+show(experiment.finetune())
+show_report("rl_vs_pretrained_significance", index_col=0)
+"""),
+        markdown("## 5. Anchor sweep"),
+        code("""
+show(experiment.sweep_kl_weight())
+show_report("kl_sweep_selection", index_col=0)
+"""),
+        markdown("""
+## 6. Long-term rewards
+
+Each reward at two anchor weights. The return after the list is paid for the last item only, so it is also run
+without credit along the list (discount 0), where it should fail.
+"""),
+        code("""
+show(experiment.sweep_rewards())
+"""),
+        markdown("## 7. A reward model that can be told a response is unknown"),
+        code("""
+show(experiment.compare_feedback_masking())
+show_report("reward_model_masked_quality", index_col=0)
+show_report("masked_feedback_judged", index_col=0)
+"""),
+        markdown("## 8. Along the list"),
+        code("""
+show(experiment.analyse_multistep())
+show_report("position_hits", index_col=0)
+show_report("feedback_assumptions_on_real_sequences", header=[0, 1], index_col=0)
+show_report("per_step_by_simulated_feedback", index_col=0)
+"""),
+        markdown("## 9. Users and items"),
+        code("""
+show(experiment.analyse_users_and_items(item_metadata))
+for report in ["relevance_by_history_length", "exposure_concentration", "impressions_by_content_type"]:
+    show_report(report, index_col=0)
+show_report("largest_impression_changes", index_col=[0, 1])
+"""),
+        markdown("## Reports"),
+        code("""
+show(pd.read_csv(experiment.reports.directory / "stage_minutes.csv", index_col=0))
+shutil.make_archive(str(WORKING / f"{DATASET}_{SESSION}_reports"), "zip", experiment.reports.directory)
+sorted(path.name for path in experiment.reports.directory.iterdir())
+"""),
+    ]
+
+
 if __name__ == "__main__":
     write_notebook("1_full_pipeline_t4.ipynb", full_pipeline_on_t4())
     write_notebook("2_prepare_offline_bundle.ipynb", prepare_offline_bundle())
     write_notebook("3_train_offline.ipynb", train_offline())
     for name, (dataset, seeds) in SEED_SESSIONS.items():
         write_notebook(name, seeds_offline(dataset, seeds))
+    for name, dataset in REVIEW_SESSIONS.items():
+        write_notebook(name, review_offline(dataset))
     print("wrote", sorted(path.name for path in OUTPUT_DIRECTORY.glob("*.ipynb")))

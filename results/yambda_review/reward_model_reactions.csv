@@ -1,0 +1,7 @@
+reward model,signal,mae,rmse,cross_entropy,auc,base_rate,num_events
+train,liked,0.0154,0.0864,0.0419,0.7386,0.0075,914439.0000
+train,disliked,0.0026,0.0352,0.0090,0.7350,0.0012,914439.0000
+train,adopts,NaN,NaN,NaN,NaN,NaN,0.0000
+heldout,liked,0.0147,0.0863,0.0418,0.7363,0.0075,914439.0000
+heldout,disliked,0.0025,0.0352,0.0092,0.7286,0.0012,914439.0000
+heldout,adopts,NaN,NaN,NaN,NaN,NaN,0.0000

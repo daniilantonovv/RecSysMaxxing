@@ -30,12 +30,20 @@ class HeldoutFeedback:
     session_continues_known: np.ndarray  # False where the observed data ends too soon to tell
     returns_known: np.ndarray
     is_organic: np.ndarray  # the user picked the item themselves (it was not recommended)
+    liked: np.ndarray
+    disliked: np.ndarray
+    reactions_known: np.ndarray  # False where the dataset records no reactions or the log ends too soon to tell
+    adopts: np.ndarray
+    adopts_known: np.ndarray  # True only for first events of an item whose window ends inside the observed data
     predicted_played_ratio: np.ndarray
     predicted_relative_ratio: np.ndarray
     predicted_session_continues: np.ndarray
     predicted_returns: np.ndarray
     predicted_is_chosen: np.ndarray  # for the item the user chose
     predicted_is_chosen_if_swapped: np.ndarray  # for another item put in its place; NaN for events that were not probed
+    predicted_liked: np.ndarray
+    predicted_disliked: np.ndarray
+    predicted_adopts: np.ndarray
     recent_played_ratio: np.ndarray  # mean played ratio over the user's preceding events in the window; NaN if none
     recent_relative_ratio: np.ndarray  # the same mean of the relative ratio
 
@@ -62,12 +70,20 @@ def predict_heldout_feedback(reward_model: RewardModel, windows: EventWindows, b
             "session_continues_known": batch.session_continues_known,
             "returns_known": batch.returns_known,
             "is_organic": batch.is_organic,
+            "liked": batch.liked,
+            "disliked": batch.disliked,
+            "reactions_known": batch.reactions_known,
+            "adopts": batch.adopts,
+            "adopts_known": batch.adopts_known,
             "predicted_played_ratio": predicted.played_ratio,
             "predicted_relative_ratio": predicted.relative_ratio,
             "predicted_session_continues": predicted.session_continues,
             "predicted_returns": predicted.returns,
             "predicted_is_chosen": predicted.is_chosen,
             "predicted_is_chosen_if_swapped": is_chosen_if_swapped,
+            "predicted_liked": predicted.liked,
+            "predicted_disliked": predicted.disliked,
+            "predicted_adopts": predicted.adopts,
             "recent_played_ratio": _mean_of_preceding(batch.played_ratio),
             "recent_relative_ratio": _mean_of_preceding(batch.relative_ratio),
         }
@@ -140,6 +156,20 @@ def retention_quality(heldout: HeldoutFeedback) -> pd.DataFrame:
     rows = {}
     for signal in RETENTION_SIGNALS:
         is_known = getattr(heldout, f"{signal}_known")
+        observed, predicted = getattr(heldout, signal)[is_known], getattr(heldout, f"predicted_{signal}")[is_known]
+        quality = prediction_quality(observed, predicted) if is_known.any() else dict.fromkeys(("mae", "rmse", "cross_entropy", "auc"), float("nan"))
+        rows[signal] = quality | {"base_rate": float(observed.mean()) if is_known.any() else float("nan"), "num_events": float(is_known.sum())}
+    return pd.DataFrame(rows).T
+
+
+REACTION_SIGNALS = {"liked": "reactions_known", "disliked": "reactions_known", "adopts": "adopts_known"}
+
+
+def reaction_quality(heldout: HeldoutFeedback) -> pd.DataFrame:
+    """Prediction quality of likes, dislikes and adoption on the events whose outcome the log knows, with how often each happens."""
+    rows = {}
+    for signal, known in REACTION_SIGNALS.items():
+        is_known = getattr(heldout, known)
         observed, predicted = getattr(heldout, signal)[is_known], getattr(heldout, f"predicted_{signal}")[is_known]
         quality = prediction_quality(observed, predicted) if is_known.any() else dict.fromkeys(("mae", "rmse", "cross_entropy", "auc"), float("nan"))
         rows[signal] = quality | {"base_rate": float(observed.mean()) if is_known.any() else float("nan"), "num_events": float(is_known.sum())}
