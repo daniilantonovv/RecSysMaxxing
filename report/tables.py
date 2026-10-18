@@ -465,6 +465,15 @@ def steps(*numbers: int) -> tuple[Row, ...]:
     return tuple(run(f"step {number}", str(number)) for number in numbers)
 
 
+def history_quartiles(*groups: str) -> tuple[Row, ...]:
+    """Rows for the reported groups "<lower> to <upper> events": every group but the last excludes its upper edge."""
+    rows = []
+    for index, group in enumerate(groups):
+        lower, upper = (int(edge) for edge in group.removesuffix(" events").split(" to "))
+        rows.append(run(f"{lower}–{upper if index == len(groups) - 1 else upper - 1} events", group))
+    return tuple(rows)
+
+
 def in_percent(header: str, name: str, decimals: int = 1, **sources) -> Column:
     return quantity(header, name, decimals=decimals, scale=100, **sources)
 
@@ -479,8 +488,6 @@ REVIEW_TABLES = (
                 run("Base recommender, ranked", "pretrained, ranked"),
                 run("Base recommender, generated", "pretrained, generated"),
                 run("RL, β = 0.3 (main run)", "RL, generated"),
-                anchor("1.0"),
-                anchor("0.3"),
                 anchor("0.1"),
                 anchor("0.0"),
             ),
@@ -488,8 +495,6 @@ REVIEW_TABLES = (
                 run("Base recommender, ranked", "pretrained, ranked"),
                 run("Base recommender, generated", "pretrained, generated"),
                 run("RL, β = 0.3 (main run)", "RL, generated"),
-                anchor("0.3"),
-                anchor("0.1"),
                 anchor("0.05"),
             ),
         }),
@@ -521,8 +526,8 @@ REVIEW_TABLES = (
         ),
         column_groups=(("", 1), ("NDCG@10", 4), ("", 1)),
         panels=(
-            Panel("KION", tuple(run(group, group) for group in ("5 to 9 events", "9 to 14 events", "14 to 25 events", "25 to 1143 events")), "kion_review"),
-            Panel("Yambda", tuple(run(group, group) for group in ("50 to 1077 events", "1077 to 2961 events", "2961 to 6421 events", "6421 to 25401 events")), "yambda_review"),
+            Panel("KION", history_quartiles("5 to 9 events", "9 to 14 events", "14 to 25 events", "25 to 1143 events"), "kion_review"),
+            Panel("Yambda", history_quartiles("50 to 1077 events", "1077 to 2961 events", "2961 to 6421 events", "6421 to 25401 events"), "yambda_review"),
         ),
     ),
     Table(
@@ -561,7 +566,6 @@ REVIEW_TABLES = (
                 run("Return after list, β = 0.3", "return after the list, kl=0.3"),
                 run("Return after list, β = 0.1", "return after the list, kl=0.1"),
                 run("same, discount 0, β = 0.3", "return after the list, discount=0, kl=0.3"),
-                run("same, discount 0, β = 0.1", "return after the list, discount=0, kl=0.1"),
             ),
             "yambda": (
                 run("Base recommender", "pretrained"),
@@ -570,9 +574,6 @@ REVIEW_TABLES = (
                 run("Adoption, β = 0.3", "adoption, kl=0.3"),
                 run("Adoption, β = 0.1", "adoption, kl=0.1"),
                 run("Return after list, β = 0.3", "return after the list, kl=0.3"),
-                run("Return after list, β = 0.1", "return after the list, kl=0.1"),
-                run("same, discount 0, β = 0.3", "return after the list, discount=0, kl=0.3"),
-                run("same, discount 0, β = 0.1", "return after the list, discount=0, kl=0.1"),
             ),
         }),
     ),
@@ -644,7 +645,7 @@ CHANGE_TABLES = (
         sessions=("kion", "yambda"),
         panels=tuple(
             (metric, tuple(Change(f"{metric}@{k}", f"all/{name}@{k}", decimals=4, has_interval=False) for k in (1, 5, 10)))
-            for metric, name in (("NDCG", "ndcg"), ("Recall", "recall"), ("MAP", "map"), ("HitRate", "hit_rate"))
+            for metric, name in (("NDCG", "ndcg"), ("Recall", "recall"), ("MAP", "map"))
         ),
     ),
     ChangeTable(
@@ -871,6 +872,7 @@ SEED_PANELS = (
         SeedRow("KL from the base recommender", **both("rl_vs_pretrained", "training/kl_to_reference", "rl")),
     )),
     ("What the anchor weight means", (
+        SeedRow("KL at β = 0.3, value model", ("kl_sweep", "training/kl_to_reference", "kl=0.3"), None),
         SeedRow("KL at β = 0.3, leave-one-out baseline", ("advantage_estimators", "training/kl_to_reference", "leave-one-out, kl=0.3"), None),
         SeedRow("Weight holding the KL budget, value model", ("kl_budget_sweep", "training/anchor_weight", "kl_budget=0.1"), ("kl_budget_sweep", "training/anchor_weight", "kl_budget=0.5")),
         SeedRow("Weight holding the KL budget, leave-one-out", ("advantage_estimators", "training/anchor_weight", "leave-one-out, kl_budget=0.1"), None),
@@ -890,8 +892,26 @@ SEED_PANELS = (
         SeedRow("NDCG@10, logged relevance alone, β = 0", **both("relevance_reward_sweep", "next_k/all/ndcg@10", "logged relevance, kl=0.0"), decimals=4),
         SeedRow("NDCG@10 on new items, logged relevance alone", None, ("relevance_reward_sweep", "next_k/new/ndcg@10", "logged relevance, kl=0.0"), decimals=4),
     )),
+    ("Validation-selected weight on KION (β = 1)", (
+        SeedRow("NDCG@10 at β = 1", ("kl_sweep", "next_k/all/ndcg@10", "kl=1.0"), None, decimals=4),
+        SeedRow("Predicted share at β = 1", ("kl_sweep", "predicted/heldout/played_ratio", "kl=1.0"), None),
+        SeedRow("Logged share per item at β = 1", ("kl_sweep", "next_k/logged/played_ratio_per_item", "kl=1.0"), None, decimals=4),
+        SeedRow("Logged surplus per item at β = 1", ("kl_sweep", "next_k/logged/relative_surplus_per_item", "kl=1.0"), None, decimals=4),
+        SeedRow("KL at β = 1", ("kl_sweep", "training/kl_to_reference", "kl=1.0"), None),
+    )),
+    ("Re-ranking by the relative share on KION, against the ranked lists it starts from", (
+        SeedRow("NDCG@10, ranked lists", ("relative_reward_sweep", "top_k/all/ndcg@10", "pretrained"), None, decimals=4),
+        SeedRow("NDCG@10, re-ranking w = 0.3", ("relative_reward_reranking", "all/ndcg@10", "re-ranking by relative ratio, weight=0.3"), None, decimals=4),
+        SeedRow("NDCG@10, re-ranking w = 0.1", ("relative_reward_reranking", "all/ndcg@10", "re-ranking by relative ratio, weight=0.1"), None, decimals=4),
+        SeedRow("Logged surplus per item, ranked lists", ("relative_reward_sweep", "top_k/logged/relative_surplus_per_item", "pretrained"), None, decimals=5),
+        SeedRow("Logged surplus per item, re-ranking w = 0.3", ("relative_reward_reranking", "logged/relative_surplus_per_item", "re-ranking by relative ratio, weight=0.3"), None, decimals=5),
+        SeedRow("Logged surplus per item, re-ranking w = 0.1", ("relative_reward_reranking", "logged/relative_surplus_per_item", "re-ranking by relative ratio, weight=0.1"), None, decimals=5),
+    )),
     ("Reference", (
         SeedRow("NDCG@10, base recommender", **both("kl_sweep", "next_k/all/ndcg@10", "pretrained"), decimals=4),
+        SeedRow("Predicted share, base recommender", **both("kl_sweep", "predicted/heldout/played_ratio", "pretrained")),
+        SeedRow("Logged share per item, base recommender", **both("kl_sweep", "next_k/logged/played_ratio_per_item", "pretrained"), decimals=4),
+        SeedRow("Logged surplus per item, base recommender", ("kl_sweep", "next_k/logged/relative_surplus_per_item", "pretrained"), None, decimals=4),
         SeedRow("NDCG@10 on new items, base recommender", None, ("kl_sweep", "next_k/new/ndcg@10", "pretrained"), decimals=4),
         SeedRow("Reward model AUC, held-out copy", **both("reward_model_played_ratio", "heldout/reward model", "auc")),
     )),
@@ -982,6 +1002,9 @@ def equal_relevance_table() -> str:
     return typst_table(headers, groups, body)
 
 
+TITLE_TRANSLITERATIONS = {"ДУХLESS": "Dukhless"}  # titles the English release of KION left in Cyrillic
+
+
 def titles_table(num_items: int = 5) -> str:
     """The KION titles whose impressions grew and shrank most under the main RL run."""
     path = RESULTS / "kion_review" / "largest_impression_changes.csv"
@@ -995,7 +1018,7 @@ def titles_table(num_items: int = 5) -> str:
         for item in [item for item in items if item["direction"] == direction][:num_items]:
             hours = float(item["duration_seconds"]) / 3600
             body.append([
-                f"{item['title']} ({int(float(item['release_year']))})",
+                f"{TITLE_TRANSLITERATIONS.get(item['title'], item['title'])} ({int(float(item['release_year']))})",
                 item["content_type"],
                 f"{hours:.1f}",
                 f"{int(float(item['train_popularity'])):,}",
