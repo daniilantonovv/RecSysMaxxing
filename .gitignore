@@ -8,6 +8,10 @@ __pycache__/
 .idea/
 .DS_Store
 
-# the Russian versions of the paper stay local
-/report/paper_*_ru.typ
-/report/paper_*_ru.pdf
+# papers read for the study and stray data files at the top level: cited, not redistributed
+/*.pdf
+/*.csv
+
+# the Russian versions of the paper stay local, wherever they are kept under report/
+/report/**/paper_*_ru.typ
+/report/**/paper_*_ru.pdf

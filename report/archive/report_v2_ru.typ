@@ -1,4 +1,4 @@
-// Отчёт, версия 2. Сборка: typst compile report/report_v2_ru.typ
+// Отчёт, версия 2. Сборка: typst compile --root report report/archive/report_v2_ru.typ
 
 #set document(
   title: "Дообучение GPT-2-рекомендера с подкреплением по обученной модели награды: отчёт, версия 2",

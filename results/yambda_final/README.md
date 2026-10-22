@@ -1,6 +1,6 @@
 # Yambda, final session
 
-The Yambda results of `report/paper_v3`. This session continued `yambda_diagnostics`: it reused that session's
+The Yambda results of `report/archive/paper_v3` (and of the later versions). This session continued `yambda_diagnostics`: it reused that session's
 interaction log, base recommender, reward models, baselines and 12 fine-tuning runs, and trained 13 more runs
 (configuration `("yambda", "final")` in `kaggle/build_notebooks.py`).
 

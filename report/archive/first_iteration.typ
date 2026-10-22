@@ -1,4 +1,4 @@
-// First-iteration report. Build with:  typst compile report/first_iteration.typ
+// First-iteration report. Build with:  typst compile --root report report/archive/first_iteration.typ
 
 #set document(
   title: "Fine-tuning a GPT-2 recommender with RL against a learned reward model: first-iteration results",

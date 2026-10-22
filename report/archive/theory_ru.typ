@@ -1,4 +1,4 @@
-// Теоретический минимум к проекту. Сборка: typst compile report/theory_ru.typ
+// Теоретический минимум к проекту. Сборка: typst compile --root report report/archive/theory_ru.typ
 
 #set document(title: "Теоретический минимум: генеративный рекомендер, модель награды и обучение с подкреплением")
 #set page(paper: "a4", margin: (x: 2.3cm, y: 2.4cm), numbering: "1")

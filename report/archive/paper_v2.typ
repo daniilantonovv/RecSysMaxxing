@@ -1,5 +1,5 @@
-// Paper draft, version 2. Build: typst compile report/paper_v2.typ
-// Numbers of runs A-E come from report/report_v2_ru.typ; numbers of runs F (Yambda) and G (KION) from the two Kaggle
+// Paper draft, version 2. Build: typst compile --root report report/archive/paper_v2.typ
+// Numbers of runs A-E come from report/archive/report_v2_ru.typ; numbers of runs F (Yambda) and G (KION) from the two Kaggle
 // notebooks of 12 October 2026. Bibliography: report/references.bib.
 
 #set document(
@@ -1569,7 +1569,7 @@ every main result needs several seeds.
 The code that produced every table and figure, with the per-run reports, is in the repository
 `github.com/daniilantonovv/RecSysMaxxing`.
 
-#bibliography("references.bib", style: "ieee", title: "References")
+#bibliography("../references.bib", style: "ieee", title: "References")
 
 #pagebreak()
 #counter(heading).update(0)

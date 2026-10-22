@@ -1,5 +1,5 @@
-// Paper draft, version 1. Build: typst compile report/paper_v1.typ
-// Every number comes from report/report_v2_ru.typ (runs A-E). Bibliography: report/references.bib.
+// Paper draft, version 1. Build: typst compile --root report report/archive/paper_v1.typ
+// Every number comes from report/archive/report_v2_ru.typ (runs A-E). Bibliography: report/references.bib.
 
 #set document(
   title: "What Keeps a Generative Recommender Relevant? An Empirical Study of Reinforcement Fine-Tuning Against a Learned Reward Model",
@@ -1210,7 +1210,7 @@ dependence on length. Finally, every main result needs several seeds.
 The code that produced every table and figure, with the per-run reports, is in the repository
 `github.com/daniilantonovv/RecSysMaxxing`.
 
-#bibliography("references.bib", style: "ieee", title: "References")
+#bibliography("../references.bib", style: "ieee", title: "References")
 
 #pagebreak()
 #counter(heading).update(0)

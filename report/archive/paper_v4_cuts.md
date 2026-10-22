@@ -122,3 +122,12 @@ loses the unweighted shares (67% / 11%) and the dependence on β.
   - two earlier Yambda runs: +1.1 / +1.8%;
   - the REINFORCE collapse thresholds;
   - the choice head and the duration-weighted reward.
+
+## Correction of 22 October
+
+- Q3 no longer attributes the return after the list to how KION records viewing. The frontier session counted the
+  return rate by the duration of an event's own title and of the next one (`results/kion_frontier/
+  return_rate_by_duration.csv`): 0.68–0.77 in every decile, correlation with log duration −0.03 and −0.05. The 0.86
+  predicted for RL's lists is above every group, so it is an extrapolation both reward models make alike.
+- Changed: the abstract, Table 1, the Q3 paragraph on the return after the list, "Offline or online", the Q3 answer,
+  the Discussion and the Conclusion.

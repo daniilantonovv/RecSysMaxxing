@@ -1,8 +1,8 @@
 // Paper draft, version 4.
-// Build: python3 report/tables.py && python3 report/figures.py && typst compile report/paper_v4.typ
+// Build: python3 report/tables.py && python3 report/figures.py && typst compile --root report report/archive/paper_v4.typ
 // Tables come from results/<session>/*.csv through report/tables.py, the SVG figures through report/figures.py; the
 // numbers quoted in the prose are read from the same reports. Bibliography: report/references.bib.
-// report/paper_v4_cuts.md lists what the long version of 15 October (commit 839539d) had and this one leaves out.
+// report/archive/paper_v4_cuts.md lists what the long version of 15 October (commit 839539d) had and this one leaves out.
 
 #set document(
   title: "What Keeps a Generative Recommender Relevant? An Empirical Study of Reinforcement Fine-Tuning Against a Learned Reward Model",
@@ -41,7 +41,7 @@
   kind: table,
   {
     show table: set text(size: size)
-    include "tables/" + name + ".typ"
+    include "../tables/" + name + ".typ"
   },
   caption: caption,
 )
@@ -88,8 +88,8 @@
   higher predicted share, further along it 11.5% for 24%. The policy learns which items everybody finishes rather
   than what each user wants. RL settings only choose a point on the frontier, the reward function moves it, and
   re-ranking by the same model, which computes the KL-anchored optimum in closed form, reaches more reward at equal
-  relevance. Rewards for return and adoption buy little offline, and the largest such gain follows an artifact of how
-  KION records viewing.
+  relevance. Rewards for return and adoption buy little offline, and the largest such gain lies beyond any return
+  rate in the log.
 ]
 
 = Introduction
@@ -130,8 +130,8 @@ questions about RL fine-tuning of a next-item recommender; @tab-answers answers 
     [*Q3.* Can we get closer to long-term goals?],
     [Return, likes and adoption can be predicted and rewarded, but at a moderate distance their predictions rise by a
       few percent (adoption: $+19%$ at no loss of relevance, with a fifth less coverage); the largest gain, the return
-      after the list on KION ($+18%$), follows an artifact of how KION records viewing, and only an online test can
-      show whether users return more.],
+      after the list on KION ($+18%$), lies beyond any return rate in the log, and only an online test can show
+      whether users return more.],
     [*Q4.* What happens when generating several steps ahead?],
     [A generated list gains after a hit and loses after a miss (on Yambda the item at position 5 is a hit in 54% of
       lists after a hit at position 4, against 25% in a ranked list, and in 4% against 6% after a miss); the predicted
@@ -389,7 +389,7 @@ reward (@sec-q5). On Yambda $beta = 0.1$ keeps relevance and $beta = 0.03$ colla
 (NDCG\@10 $0.006 plus.minus 0.004$; @tab-sweep).
 
 #figure(
-  image("figures/frontier_by_distance.svg", width: 88%),
+  image("../figures/frontier_by_distance.svg", width: 88%),
   caption: [Every fine-tuning run of the default reward against the KL distance it ended at from the base
     recommender (logarithmic axis; the base recommender at the left edge; final session).],
 ) <fig-frontier>
@@ -414,10 +414,10 @@ as a whole, after its last item. Rewarding the return of each item raises it by 
 NDCG\@10 and does not move it on Yambda (@tab-retention). The _return after the list_ moves the KION policy further
 than any per-item reward (KL 0.51 at $beta = 0.3$): the predicted return rises from 0.73 to 0.86 ($+18%$), as the
 held-out model also predicts, while NDCG\@10 falls by 69% and the logged share by 64% (@tab-long-term), and the mean
-duration of a recommended title falls from 5.7 to 2.2 hours. This follows how KION records viewing rather than what
-brings users back: with one row per user and title, dated by its last view, a title followed by a long series shows no
-new row until the series is finished and looks as if the user stayed away, while short films produce rows often. Both
-reward models learn this correctly, so the held-out model cannot catch it. With discount 0 the policy hardly moves
+duration of a recommended title falls from 5.7 to 2.2 hours. KION's format, one row per user and title dated by its
+last view, does not explain it: in every decile of the duration of an event's own or next title, the return rate is
+between 0.68 and 0.77. No group comes back at 0.86: both reward models extrapolate alike, so the held-out model cannot
+catch it. With discount 0 the policy hardly moves
 (KL 0.006): this is the one reward for which credit along the list matters. On Yambda it does not move.
 
 #report-table("long_term_rewards", [Long-term rewards (review session). "Δ": change of NDCG\@10 in percent;
@@ -433,12 +433,12 @@ logged share by 2.5%, while coverage falls from 0.52 to 0.41.
 *Offline or online.* Offline we can check whether a signal is predictable, whether it varies between the items a
 policy chooses from, whether a held-out model agrees, and what it costs in relevance. Whether users return, continue
 or adopt more under a new policy is counterfactual: the log shows these outcomes only under the policy that produced
-it, adoption needs 14 days after a first play, which a test week does not have, and a label can follow the logging
-format, as the return after the list did. This needs the online experiment of @sec-online.
+it, adoption needs 14 days after a first play, which a test week does not have, and a prediction can leave the log's
+range, as the return after the list did. This needs the online experiment of @sec-online.
 
 #answer[Q3][Rewards for return, likes and adoption can be learned and optimised, but at a moderate distance their
-  predictions rise by a few percent; adoption is the most promising signal, the largest gain follows a logging
-  artifact, and only an online test can show whether users return more.]
+  predictions rise by a few percent; adoption is the most promising signal, the largest gain lies outside the log,
+  and only an online test can show whether users return more.]
 
 == Q4. What happens when generating several steps ahead? <sec-q4>
 
@@ -446,7 +446,7 @@ A generated list appends each chosen item to the history as if the user had cons
 ahead under an assumption that is false for most items: at most 17% of the items at any position are hits.
 
 #figure(
-  image("figures/position_hits.svg", width: 88%),
+  image("../figures/position_hits.svg", width: 88%),
   caption: [Hit rate by position of the list, for all lists, after a miss and after a hit at the position before:
     ranked and generated lists of the base recommender and generated lists of the main run (review session).],
 ) <fig-positions>
@@ -470,7 +470,7 @@ against 0.758 on KION). A policy fine-tuned against it lands on the same frontie
 level of a multi-step predicted reward, not which policy wins.
 
 #figure(
-  image("figures/feedback_assumptions.svg", width: 60%),
+  image("../figures/feedback_assumptions.svg", width: 60%),
   caption: [The reward model on the users' real next five items: bias and AUC of the predicted share at each step,
     with the earlier responses as logged, expected, sampled, finished, or unknown to the model trained with hidden
     responses (review session).],
@@ -537,11 +537,11 @@ history rises from 51% to 62%.
 A second reward model, the usual defence against reward hacking, catches the exploitation specific to one set of
 weights (0.84 against 0.69 without an anchor) and misses what any model of this kind invites, as Eisenstein et al.
 @eisenstein2023helping found for ensembles: both of our models learned, correctly, that some titles are finished more
-often than others, and both learned the logging artifact behind the return after the list. Scoring the same lists for
+often than others, and both extrapolate the return after the list past any rate in the log. Scoring the same lists for
 another user, splitting the policy's change into a part per item, and counting the logged response to recommended
 items expose this cheaply. For a reward that sums per-item predictions, the anchored optimum is a re-ranking of
 $pi_0$ (@eq-optimum), and a policy gradient is an expensive way to approximate it; the one time sequential credit
-mattered, it followed an artifact of the log. In practice: report the KL distance a run ended at, not its weight;
+mattered, it chased a prediction outside the log. In practice: report the KL distance a run ended at, not its weight;
 re-rank by the same model and by item means before fine-tuning; score lists for another user; and simulate generated
 items with a reward model trained to read unknown responses.
 
@@ -584,8 +584,8 @@ before running RL, a larger reward model, a longer Yambda context, and a test pe
 *Conclusion.* We fine-tuned a generative recommender against a learned reward model in the setting with the fewest
 protections. The reward rose and a model trained on other users confirmed it, but the policy had learned which items
 everybody finishes, users took to the recommendations less than usual, and relevance was traded along a frontier that
-RL settings could only move along. Long-term rewards bought little, and the largest such gain followed an artifact of
-the log. What improved logged outcomes came from the log or from rewards no item can earn on its own: logged relevance
+RL settings could only move along. Long-term rewards bought little, and the largest such gain lay outside the range
+of the log. What improved logged outcomes came from the log or from rewards no item can earn on its own: logged relevance
 in the reward, off-policy learning from logged sessions, and re-ranking by the relative share. For a reward model to
 be worth optimising with RL, it has to know something about the user that cannot be looked up per item: on KION that
 part was small for every method, on Yambda the reward model held more of it than RL used. Code, configurations and
@@ -595,7 +595,7 @@ every table are in `github.com/daniilantonovv/RecSysMaxxing`.
 #{
   set text(size: 7.5pt)
   set par(justify: false, leading: 0.5em)
-  columns(2, gutter: 14pt, bibliography("references.bib", style: "ieee", title: none))
+  columns(2, gutter: 14pt, bibliography("../references.bib", style: "ieee", title: none))
 }
 
 #pagebreak()

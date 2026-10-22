@@ -1,5 +1,5 @@
 // Paper draft, version 3.
-// Build: python3 report/tables.py && python3 report/figures.py && typst compile report/paper_v3.typ
+// Build: python3 report/tables.py && python3 report/figures.py && typst compile --root report report/archive/paper_v3.typ
 // Tables come from results/<session>/*.csv through report/tables.py, figures 2 and 3 through report/figures.py; the
 // numbers quoted in the prose are read from the same reports. Bibliography: report/references.bib.
 
@@ -40,7 +40,7 @@
   kind: table,
   {
     show table: set text(size: size)
-    include "tables/" + name + ".typ"
+    include "../tables/" + name + ".typ"
   },
   caption: caption,
 )
@@ -533,7 +533,7 @@ $beta = 0.03$ collapses the policy (KL 4.4): the cliff lies between these two we
 $beta = 0.05$.
 
 #figure(
-  image("figures/frontier_by_distance.svg", width: 100%),
+  image("../figures/frontier_by_distance.svg", width: 100%),
   caption: [Every fine-tuning run of the default reward against the distance it ended at from the base recommender
     (logarithmic axis; the base recommender is drawn at the left edge). Runs that differ in the advantage estimator
     and in how the constraint is set lie on one curve. Runs with myopic credit lie on it at the KL budgets and, at a
@@ -617,7 +617,7 @@ often they are finished.
 == Does it take RL? <sec-alternatives>
 
 #figure(
-  image("figures/methods.svg", width: 100%),
+  image("../figures/methods.svg", width: 100%),
   caption: [Methods compared at the predicted share they reach (held-out model): relevance, the logged share per
     recommended item, and coverage. Points of a line are one method at several strengths. RL and the fine-tuning
     methods start from the generated lists of the base recommender, re-ranking from its ranked lists.],
@@ -785,7 +785,7 @@ The code, the configuration and every table of every session are in the reposito
 `github.com/daniilantonovv/RecSysMaxxing` (`results/`); the tables of this paper are typeset from those files by
 `report/tables.py`.
 
-#bibliography("references.bib", style: "ieee", title: "References")
+#bibliography("../references.bib", style: "ieee", title: "References")
 
 #pagebreak()
 #counter(heading).update(0)
