@@ -11,9 +11,11 @@ a table fills up as sessions are added. Needs nothing beyond the standard librar
 from __future__ import annotations
 
 import csv
+import statistics
 from dataclasses import dataclass, fields
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
+from typing import Callable
 
 RESULTS = Path(__file__).resolve().parents[1] / "results"
 OUTPUT = Path(__file__).resolve().parent / "tables"
@@ -478,6 +480,43 @@ def in_percent(header: str, name: str, decimals: int = 1, **sources) -> Column:
     return quantity(header, name, decimals=decimals, scale=100, **sources)
 
 
+def guided(reward: str, strengths: tuple[str, ...] = ("0.3", "0.1")) -> tuple[Row, ...]:
+    """The base recommender and its lists guided by `reward` at each strength, judging each item by its own reward and with look-ahead."""
+    report = "inference_time_alignment"
+    rows = [run("Base recommender", "pretrained", report=report)]
+    for discount, description in (("0.0", "own reward"), ("0.9", "look-ahead")):
+        rows += [run(f"Guided, {description}, β = {strength}", f"{reward}, guided, discount={discount}, strength={strength}", report=report) for strength in strengths]
+    return tuple(rows)
+
+
+LONG_TERM_COLUMNS = (
+    KL,
+    NDCG,
+    Column("Δ, %", Source(quantity="all/ndcg@10"), decimals=1, relative_to=Source(run="pretrained")),
+    quantity("Return", "predicted/heldout/returns_after_list"),
+    quantity("P(like)", "predicted/heldout/liked", decimals=4, only_in=("yambda_review",)),
+    quantity("P(adopt)", "predicted/heldout/adopts", only_in=("yambda_review", "yambda_frontier")),
+    LOGGED,
+    quantity("Cover.", "profile/catalog_coverage"),
+    quantity("Hours", "profile/mean_duration_seconds", decimals=1, scale=1 / 3600, only_in=("kion_review", "kion_frontier")),
+)
+LONG_TERM_PANELS = review_panels({
+    "kion": (
+        run("Base recommender", "pretrained"),
+        run("Return after list, β = 0.3", "return after the list, kl=0.3"),
+        run("Return after list, β = 0.1", "return after the list, kl=0.1"),
+        run("same, discount 0, β = 0.3", "return after the list, discount=0, kl=0.3"),
+    ),
+    "yambda": (
+        run("Base recommender", "pretrained"),
+        run("Like − dislike, β = 0.3", "likes, kl=0.3"),
+        run("Like − dislike, β = 0.1", "likes, kl=0.1"),
+        run("Adoption, β = 0.3", "adoption, kl=0.3"),
+        run("Adoption, β = 0.1", "adoption, kl=0.1"),
+        run("Return after list, β = 0.3", "return after the list, kl=0.3"),
+    ),
+})
+
 REVIEW_TABLES = (
     Table(
         "concentration",
@@ -546,36 +585,16 @@ REVIEW_TABLES = (
             "yambda": (run("RL, β = 0.3 (main run)", "RL"), anchor("0.3"), anchor("0.1"), anchor("0.05")),
         }),
     ),
+    Table("long_term_rewards", report="reward_sweep", columns=LONG_TERM_COLUMNS, panels=LONG_TERM_PANELS),
     Table(
-        "long_term_rewards",
+        "long_term_rewards_and_guidance",
         report="reward_sweep",
-        columns=(
-            KL,
-            NDCG,
-            Column("Δ, %", Source(quantity="all/ndcg@10"), decimals=1, relative_to=Source(run="pretrained")),
-            quantity("Return", "predicted/heldout/returns_after_list"),
-            quantity("P(like)", "predicted/heldout/liked", decimals=4, only_in=("yambda_review",)),
-            quantity("P(adopt)", "predicted/heldout/adopts", only_in=("yambda_review",)),
-            LOGGED,
-            quantity("Cover.", "profile/catalog_coverage"),
-            quantity("Hours", "profile/mean_duration_seconds", decimals=1, scale=1 / 3600, only_in=("kion_review",)),
+        columns=LONG_TERM_COLUMNS,
+        panels=(
+            *LONG_TERM_PANELS,
+            Panel("KION, guided decoding by the return after the list (frontier session)", guided("return after the list"), "kion_frontier"),
+            Panel("Yambda, guided decoding by adoption (frontier session)", guided("adoption"), "yambda_frontier"),
         ),
-        panels=review_panels({
-            "kion": (
-                run("Base recommender", "pretrained"),
-                run("Return after list, β = 0.3", "return after the list, kl=0.3"),
-                run("Return after list, β = 0.1", "return after the list, kl=0.1"),
-                run("same, discount 0, β = 0.3", "return after the list, discount=0, kl=0.3"),
-            ),
-            "yambda": (
-                run("Base recommender", "pretrained"),
-                run("Like − dislike, β = 0.3", "likes, kl=0.3"),
-                run("Like − dislike, β = 0.1", "likes, kl=0.1"),
-                run("Adoption, β = 0.3", "adoption, kl=0.3"),
-                run("Adoption, β = 0.1", "adoption, kl=0.1"),
-                run("Return after list, β = 0.3", "return after the list, kl=0.3"),
-            ),
-        }),
     ),
     Table(
         "position_hits",
@@ -1029,8 +1048,181 @@ def titles_table(num_items: int = 5) -> str:
     return typst_table(["Type", "Hours", "Viewers in training", "Usual share", "Lists before", "after"], (), body)
 
 
+# The frontier sessions: three seeds on KION (seed 0 is the session itself, seeds 1 and 2 are pooled with it in
+# over_three_seeds.csv, one number per seed), one seed on Yambda.
+FRONTIER_SESSIONS = {"kion": "kion_frontier", "yambda": "yambda_frontier"}
+FRONTIER_SEEDS = RESULTS / "kion_frontier_seeds" / "over_three_seeds.csv"
+FRONTIER_NUM_SEEDS = 3
+PREDICTED_SHARE = "predicted/heldout/played_ratio"
+PERSONAL = "predicted/heldout/personal_played_ratio"
+ITEM_EFFECT_SHARE = "within-history variation explained by one effect per item"
+
+Lookup = Callable[[str, str, str], "float | None"]  # (report, run, quantity) -> the number in one seed
+
+
+@lru_cache(maxsize=None)
+def frontier_seed_cells() -> dict[tuple[str, str, str], tuple[str, ...]]:
+    """(report, row, column) of a KION frontier report -> its text in seeds 0, 1 and 2."""
+    if not FRONTIER_SEEDS.exists():
+        return {}
+    with FRONTIER_SEEDS.open(newline="", encoding="utf-8") as file:
+        return {(row["report"], row["row"], row["column"]): tuple(row[f"seed_{seed}"] for seed in range(FRONTIER_NUM_SEEDS)) for row in csv.DictReader(file)}
+
+
+def seed_number(seed: int, report: str, run_name: str, quantity_name: str) -> float | None:
+    """A number of one seed of the KION frontier sessions, whichever of the run and the quantity the report has in its rows."""
+    cells = frontier_seed_cells()
+    for name in (quantity_name, GENERATED_LISTS + quantity_name):
+        for key in ((report, name, run_name), (report, run_name, name)):
+            if cells.get(key, ("",) * FRONTIER_NUM_SEEDS)[seed]:
+                return float(cells[key][seed])
+    return None
+
+
+def frontier_lookups(dataset: str) -> list[Lookup]:
+    """One lookup per seed of the dataset's frontier sessions."""
+    if dataset == "kion" and frontier_seed_cells():
+        return [partial(seed_number, seed) for seed in range(FRONTIER_NUM_SEEDS)]
+    session = FRONTIER_SESSIONS[dataset]
+    return [lambda report, run_name, quantity_name: number(Source(session, report, run_name, quantity_name))]
+
+
+def gain_fraction(report: str, run_name: str, reference: str) -> Callable[[Lookup], float | None]:
+    """The fraction of `reference`'s gain in predicted share over the base recommender that `run_name` reaches."""
+
+    def value(lookup: Lookup) -> float | None:
+        numbers = [lookup(report, name, PREDICTED_SHARE) for name in (run_name, reference, "pretrained")]
+        if None in numbers:
+            return None
+        reached, full, start = numbers
+        return (reached - start) / (full - start)
+
+    return value
+
+
+def relative_change(report: str, run_name: str, quantity_name: str, reference: str = "pretrained") -> Callable[[Lookup], float | None]:
+    def value(lookup: Lookup) -> float | None:
+        after, before = lookup(report, run_name, quantity_name), lookup(report, reference, quantity_name)
+        return None if after is None or not before else after / before - 1
+
+    return value
+
+
+def plain(report: str, run_name: str, quantity_name: str) -> Callable[[Lookup], float | None]:
+    return lambda lookup: lookup(report, run_name, quantity_name)
+
+
+@dataclass(frozen=True)
+class Derived:
+    """A number computed within each seed from several cells of its reports, shown as mean ± standard deviation over the seeds."""
+
+    label: str
+    value: Callable[[Lookup], float | None]
+    decimals: int = 1
+    scale: float = 100.0
+    signed: bool = True
+
+
+def over_seeds(row: Derived, dataset: str) -> str:
+    values = [found for found in (row.value(lookup) for lookup in frontier_lookups(dataset)) if found is not None]
+    if not values:
+        return MISSING
+    text = formatted(statistics.mean(values), row.decimals, row.scale, signed=row.signed)
+    if len(values) > 1:
+        text += f" ± {formatted(statistics.stdev(values), row.decimals, row.scale)}"
+    return text
+
+
+def seeds_header(dataset: str) -> str:
+    num_seeds = len(frontier_lookups(dataset))
+    return f"{DATASET_NAMES[dataset]}, {num_seeds} seed{'s' if num_seeds > 1 else ''}"
+
+
+def capacity_fraction(label: str, restricted: str, budget: str) -> Derived:
+    return Derived(label, gain_fraction("capacity_sweep", f"{restricted}, kl_budget={budget}", f"kl_budget={budget}"), decimals=0, signed=False)
+
+
+def part_of_main_run(label: str, part: str, quantity_name: str | None = None) -> Derived:
+    """A part of the main run's change: its fraction of RL's gain, or the relative change of a quantity."""
+    if quantity_name is None:
+        return Derived(label, gain_fraction("policy_change_parts", part, "RL"), decimals=0, signed=False)
+    return Derived(label, relative_change("policy_change_parts", part, quantity_name))
+
+
+def item_effect_share(label: str, run_name: str) -> Derived:
+    return Derived(label, plain("item_effect_share", run_name, ITEM_EFFECT_SHARE), decimals=2, scale=1.0, signed=False)
+
+
+BASE_PLUS_OFFSETS, RL_MINUS_OFFSETS = "base + RL's item offsets", "RL - its item offsets"
+MECHANISM_PANELS = (
+    ("Fine-tuning held to a KL budget: % of full RL's gain in predicted share", (
+        capacity_fraction("One score offset per item, budget 0.1", "item offsets", "0.1"),
+        capacity_fraction("One score offset per item, budget 0.5", "item offsets", "0.5"),
+        capacity_fraction("Rank-1 LoRA, budget 0.1", "rank-1 updates", "0.1"),
+        capacity_fraction("Rank-1 LoRA, budget 0.5", "rank-1 updates", "0.5"),
+    )),
+    ("The main run's change split into one offset per item and the rest", (
+        part_of_main_run("Base + RL's item offsets: % of RL's gain", BASE_PLUS_OFFSETS),
+        part_of_main_run("Base + RL's item offsets: NDCG@10, change in %", BASE_PLUS_OFFSETS, NDCG.source.quantity),
+        part_of_main_run("Base + RL's item offsets: personal part, change in %", BASE_PLUS_OFFSETS, PERSONAL),
+        part_of_main_run("RL − its item offsets: % of RL's gain", RL_MINUS_OFFSETS),
+        part_of_main_run("RL − its item offsets: NDCG@10, change in %", RL_MINUS_OFFSETS, NDCG.source.quantity),
+        part_of_main_run("RL − its item offsets: personal part, change in %", RL_MINUS_OFFSETS, PERSONAL),
+        part_of_main_run("RL: NDCG@10, change in %", "RL", NDCG.source.quantity),
+        part_of_main_run("RL: personal part, change in %", "RL", PERSONAL),
+    )),
+    ("Share of within-history variation that one effect per item explains", (
+        item_effect_share("Reward model's predictions (the optimum's change)", "reward model's predictions (the optimum's change)"),
+        item_effect_share("RL, main run", "RL"),
+        item_effect_share("RL, KL budget 0.5", "kl_budget=0.5"),
+        item_effect_share("Rank-1 LoRA, budget 0.5", "rank-1 updates, kl_budget=0.5"),
+        item_effect_share("Item offsets, budget 0.5 (their ceiling)", "item offsets, kl_budget=0.5"),
+    )),
+)
+
+
+def mechanism_table() -> str:
+    body: list[list[str] | str] = []
+    for title, rows in MECHANISM_PANELS:
+        body.append(title)
+        body += [[row.label, *(over_seeds(row, dataset) for dataset in DATASET_NAMES)] for row in rows]
+    return typst_table([seeds_header(dataset) for dataset in DATASET_NAMES], (), body)
+
+
+LOGGED_METHOD_QUANTITIES = (
+    ("NDCG@10", NDCG.source.quantity),
+    ("Logged surplus", SURPLUS.source.quantity),
+    ("Personal part", PERSONAL),
+    ("Coverage", COVERAGE.source.quantity),
+    ("Pred. share", PREDICTED_SHARE),
+)
+LOGGED_METHODS = (
+    ("RL, main run (β = 0.3)", "RL"),
+    ("Liked-only fine-tuning", "liked-only fine-tuning"),
+    ("Reward-weighted, relative share, τ = 0.3", "reward-weighted, relative_ratio, temperature=0.3"),
+    ("Reward-weighted, relative share, τ = 1", "reward-weighted, relative_ratio, temperature=1.0"),
+    ("Reward-weighted, consumed share, τ = 0.3", "reward-weighted, played_ratio, temperature=0.3"),
+    ("Within-user DPO, β = 0.5", "within-user DPO, beta=0.5"),
+    ("Within-user DPO, β = 0.1", "within-user DPO, beta=0.1"),
+)
+
+
+def logged_methods_table() -> str:
+    """Learning from logged responses alone against the base recommender: relative changes in percent."""
+    body: list[list[str] | str] = []
+    for dataset in DATASET_NAMES:
+        body.append(seeds_header(dataset))
+        for label, method in LOGGED_METHODS:
+            cells = [over_seeds(Derived(label, relative_change("logged_preference_methods", method, name)), dataset) for _, name in LOGGED_METHOD_QUANTITIES]
+            if any(text != MISSING for text in cells):
+                body.append([label, *cells])
+    return typst_table([header for header, _ in LOGGED_METHOD_QUANTITIES], (), body)
+
+
 def write_tables() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    (OUTPUT / "mechanism.typ").write_text(mechanism_table(), encoding="utf-8")
+    (OUTPUT / "logged_methods.typ").write_text(logged_methods_table(), encoding="utf-8")
     (OUTPUT / "seeds.typ").write_text(seeds_table(), encoding="utf-8")
     (OUTPUT / "equal_relevance.typ").write_text(equal_relevance_table(), encoding="utf-8")
     (OUTPUT / "titles.typ").write_text(titles_table(), encoding="utf-8")

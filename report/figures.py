@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from tables import DATASET_NAMES, REVIEW_SESSIONS, SESSIONS, Source, number
+from tables import DATASET_NAMES, FRONTIER_SESSIONS, REVIEW_SESSIONS, SESSIONS, Source, number
 
 OUTPUT = Path(__file__).resolve().parent / "figures"
 FONT = "New Computer Modern"
@@ -31,6 +31,7 @@ KL = "training/kl_to_reference"
 NDCG = "all/ndcg@10"
 SHARE = "predicted/heldout/played_ratio"
 LOGGED_SHARE = "logged/played_ratio_per_item"
+SURPLUS = "logged/relative_surplus_per_item"
 COVERAGE = "profile/catalog_coverage"
 
 
@@ -44,6 +45,7 @@ class Series:
     marker: str = "circle"
     joined: bool = True
     prefix: str = ""  # put before the quantity of each axis, for reports whose columns name a policy and a quantity
+    ordered: bool = False  # join the points from left to right rather than in the order of `runs`
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,7 @@ KL_BUDGETS = ("0.1", "0.2", "0.5")
 RERANKING_WEIGHTS = ("1.0", "0.3", "0.1", "0.03", "0.01", "0.0")
 BASE_RECOMMENDER = Series("base recommender, generated lists", (("kl_sweep", "pretrained"),), BLACK, marker="star", joined=False)
 POSITIONS = tuple(("position_hits", str(position)) for position in range(1, 11))
+MULTI_TOKEN_POSITIONS = tuple(("multi_token_position_hits", str(position)) for position in range(1, 11))
 STEPS = tuple(("feedback_assumptions_on_real_sequences", str(step)) for step in range(1, 6))
 
 FIGURES = (
@@ -137,6 +140,40 @@ FIGURES = (
         sessions=tuple(REVIEW_SESSIONS.values()),
     ),
     Figure(
+        "position_hits_with_heads",
+        horizontal=Axis(None, "position in the list"),
+        vertical=(Axis("hit_rate", "all lists"), Axis("hit_rate_after_miss", "after a miss"), Axis("hit_rate_after_hit", "after a hit")),
+        series=(
+            Series("ranked list", MULTI_TOKEN_POSITIONS, BLACK, marker="square", prefix="ranked/"),
+            Series("generated list", MULTI_TOKEN_POSITIONS, BLUE, prefix="generated/"),
+            Series("one head per position", MULTI_TOKEN_POSITIONS, GREEN, marker="triangle", prefix="one head per position/"),
+        ),
+        sessions=tuple(FRONTIER_SESSIONS.values()),
+    ),
+    Figure(
+        "frontier_methods",
+        horizontal=Axis(SHARE, "predicted share, held-out model"),
+        vertical=(Axis(NDCG, "NDCG@10"), Axis(SURPLUS, "logged surplus per item")),
+        series=(
+            Series(
+                "RL, anchor weights and KL budgets",
+                (*anchor_sweep(("1.0", "0.3", "0.1")), ("rl_vs_pretrained", "rl"), *anchor_sweep(("0.5",), "kl_budget={}", "kl_budget_sweep")),
+                BLUE,
+                ordered=True,
+            ),
+            Series("re-ranking (closed form)", anchor_sweep(RERANKING_WEIGHTS, "re-ranking, weight={}", "inference_time_alignment"), ORANGE, marker="square"),
+            Series("guided decoding (closed form)", anchor_sweep(("1.0", "0.3", "0.1"), "played ratio, guided, discount=0.0, strength={}", "inference_time_alignment"), GREEN, marker="triangle"),
+            Series("weights between and beyond RL", anchor_sweep(("0.25", "0.5", "0.75", "1.5", "2.0"), "weights x{}", "weight_interpolation"), SKY, marker="diamond"),
+            Series("RL, one offset per item", anchor_sweep(("0.1", "0.5"), "item offsets, kl_budget={}", "capacity_sweep"), VERMILION, marker="square", joined=False),
+            Series("reward-weighted, relative share", anchor_sweep(("1.0", "0.3"), "reward-weighted, relative_ratio, temperature={}", "logged_preference_methods"), PURPLE, marker="diamond", joined=False),
+            Series("one head per position", (("multi_token_lists", "one head per position"),), GREEN, marker="star", joined=False),
+            Series("base recommender, generated", (("multi_token_lists", "generated"),), BLACK, marker="star", joined=False),
+            Series("base recommender, ranked", (("multi_token_lists", "ranked"),), BLACK, marker="square", joined=False),
+        ),
+        sessions=tuple(FRONTIER_SESSIONS.values()),
+        legend_columns=2,
+    ),
+    Figure(
         "feedback_assumptions",
         horizontal=Axis(None, "step: real next item of the user"),
         vertical=(Axis("bias", "bias of the prediction"), Axis("auc", "AUC")),
@@ -163,7 +200,7 @@ def points_of(series: Series, session: str, horizontal: Axis, vertical: Axis) ->
         x, y = (float(run) if axis.quantity is None else number(Source(session, report, run, series.prefix + axis.quantity)) for axis in (horizontal, vertical))
         if x is not None and y is not None:
             points.append((max(x, SMALLEST_DISTANCE) if horizontal.logarithmic else x, y))
-    return points
+    return sorted(points) if series.ordered else points
 
 
 def linear_ticks(low: float, high: float, wanted: int = 4) -> list[float]:
