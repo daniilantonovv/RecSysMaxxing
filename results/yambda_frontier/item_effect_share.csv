@@ -1,0 +1,9 @@
+,within-history variation explained by one effect per item
+reward model's predictions (the optimum's change),0.42273172933318215
+RL,0.49645162670951815
+kl=0.05,0.5513345478648113
+kl=0.1,0.46141616060445234
+kl_budget=0.5,0.49438518152025346
+"item offsets, kl_budget=0.5",0.8548318760052872
+"rank-1 updates, kl_budget=0.5",0.5170380316495305
+"group-relative, kl_budget=0.5",0.47474704857290295

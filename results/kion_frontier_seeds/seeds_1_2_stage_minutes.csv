@@ -1,0 +1,12 @@
+,minutes
+prepare_data,0.0535 ± 0.0690
+pretrain_policy,3.7452 ± 0.0027
+train_reward_models,5.2356 ± 0.0020
+finetune,17.7862 ± 0.0128
+sweep_kl_weight,19.6828 ± 0.0072
+restrict_finetuning_capacity,37.1087 ± 0.0057
+decompose_policy_change,1.4709 ± 0.0003
+align_at_inference,24.0006 ± 0.0040
+learn_from_logged_preferences,8.1345 ± 0.0456
+predict_lists_without_feedback,1.8895 ± 0.0025
+interpolate_weights,3.3462 ± 0.0001

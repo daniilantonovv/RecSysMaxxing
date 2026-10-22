@@ -1,0 +1,17 @@
+,minutes
+prepare_data,2.232006349183335
+pretrain_policy,93.78455097061666
+train_reward_models,20.82505532375
+finetune,39.127084523616666
+sweep_kl_weight,37.19234679909999
+sweep_kl_budget,18.466669926
+compare_advantage_estimators,2.347666668356396e-06
+explain_reward_gain,2.2569539652500072
+diagnose_return_label,0.1073937514833536
+restrict_finetuning_capacity,36.03024618363334
+compare_group_relative_advantages,15.08570214325003
+decompose_policy_change,0.537254998699973
+align_at_inference,57.49936197791667
+learn_from_logged_preferences,21.44107300208331
+predict_lists_without_feedback,12.46545222804998
+interpolate_weights,0.7840885185999772

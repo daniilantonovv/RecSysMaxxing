@@ -1,0 +1,7 @@
+reward model,signal,mae,rmse,cross_entropy,auc,base_rate,num_events
+train,liked,,,,,,0.0
+train,disliked,,,,,,0.0
+train,adopts,,,,,,0.0
+heldout,liked,,,,,,0.0
+heldout,disliked,,,,,,0.0
+heldout,adopts,,,,,,0.0
