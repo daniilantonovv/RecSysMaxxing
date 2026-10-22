@@ -9,6 +9,7 @@ import torch
 
 from gptrec.models.policy import NextItemPolicy, PolicyConfig
 from gptrec.models.reward_model import RewardModel, RewardModelConfig
+from gptrec.models.value_model import ContinuationValueModel
 
 
 def save_model(model: NextItemPolicy | RewardModel, path: str | Path) -> None:
@@ -35,3 +36,17 @@ def load_reward_model(path: str | Path, device: torch.device | str = "cpu") -> R
 
 def _read(path: str | Path) -> dict:
     return torch.load(Path(path), map_location="cpu", weights_only=True)
+
+
+def save_continuation_value_model(model: ContinuationValueModel, path: str | Path) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"config": asdict(model.config), "horizon": model.horizon, "weights": model.state_dict()}, path)
+
+
+def load_continuation_value_model(path: str | Path, device: torch.device | str = "cpu") -> ContinuationValueModel:
+    """The saved value model of what follows each item of a list, frozen and in evaluation mode."""
+    checkpoint = _read(path)
+    model = ContinuationValueModel(PolicyConfig.from_dict(checkpoint["config"]), checkpoint["horizon"])
+    model.load_state_dict(checkpoint["weights"])
+    return model.to(device).eval().requires_grad_(False)

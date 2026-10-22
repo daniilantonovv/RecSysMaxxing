@@ -15,7 +15,6 @@ relevance / reward trade-off.
 
 from __future__ import annotations
 
-import copy
 import math
 from dataclasses import dataclass, field
 from enum import Enum
@@ -29,6 +28,7 @@ from tqdm.auto import tqdm
 from gptrec.data.batches import EvalExamples, HistoryBatch, TrainingHistorySampler
 from gptrec.data.log import InteractionLog
 from gptrec.evaluation.relevance import contains
+from gptrec.models.adapters import Adaptation, adaptable_copy, merge_low_rank_updates
 from gptrec.models.policy import NextItemPolicy
 from gptrec.models.reward_model import RewardModel
 from gptrec.models.value_model import ValueModel
@@ -51,6 +51,7 @@ Metrics = dict[str, float]
 PROGRESS_REFRESH_SECONDS = 5.0  # keeps the logs of long unattended runs short
 ANCHOR_WEIGHT_RANGE = (1e-4, 1e3)  # an adaptive anchor weight stays inside it
 MAX_RELATIVE_KL_EXCESS = 5.0  # a KL further above its budget than this many times the budget tightens the anchor no faster
+GROUP_STD_FLOOR = 1e-6  # keeps group-normalised advantages finite where all lists of a history earn the same return
 
 
 class AdvantageEstimator(str, Enum):
@@ -58,6 +59,7 @@ class AdvantageEstimator(str, Enum):
 
     GAE = "gae"  # a learned value model with generalised advantage estimation: PPO as it is usually run
     LEAVE_ONE_OUT = "leave_one_out"  # the mean return of the other lists sampled in the same iteration; no value model
+    GROUP_RELATIVE = "group_relative"  # GRPO: each return against the mean and the spread of the returns of its history's lists
 
 
 @dataclass(frozen=True)
@@ -88,6 +90,9 @@ class RLConfig:
     target_kl: float | None = None
     anchor_adaptation_rate: float = 0.03  # relative change of the weight per iteration when the KL is off its budget by the budget itself
     entropy_weight: float = 0.0
+    # What fine-tuning may change: every weight, one score offset per item, or low-rank updates of the transformer.
+    adaptation: Adaptation = Adaptation.FULL
+    low_rank: int = 1
 
     learning_rate: float = 1e-5
     value_learning_rate: float = 1e-4
@@ -114,11 +119,12 @@ def finetune_with_rl(
     seed_everything(config.seed)
     reference = pretrained_policy.to(device).eval().requires_grad_(False)
     # Dropout stays off: the log-probabilities recorded while sampling must equal those recomputed for the update.
-    policy = copy.deepcopy(reference).eval().requires_grad_(True)
+    policy = adaptable_copy(reference, config.adaptation, config.low_rank).to(device).eval()
+    trainable = [parameter for parameter in policy.parameters() if parameter.requires_grad]
     reward_model = reward_model.to(device).eval()
     reward_function = RewardFunction(config.reward, log.items, device, item_embeddings=reference.item_embedding.weight)
     moments = TrainingHistorySampler(log, config.history_len, config.max_future, config.min_history, seed=config.seed)
-    optimizer = torch.optim.AdamW(policy.parameters(), lr=config.learning_rate, weight_decay=0.0)
+    optimizer = torch.optim.AdamW(trainable, lr=config.learning_rate, weight_decay=0.0)
     scaler = gradient_scaler(device, config.mixed_precision)
     uses_critic = config.advantage_estimator is AdvantageEstimator.GAE
     critic = _Critic(reference, config, device) if uses_critic else None
@@ -143,13 +149,18 @@ def finetune_with_rl(
             returns = discounted_returns(rewards, config.discount)
             if critic is not None:
                 advantages = generalised_advantages(rewards, critic.values(history, generated.actions), config.discount, config.gae_lambda)
+            elif config.advantage_estimator is AdvantageEstimator.GROUP_RELATIVE:
+                advantages = group_relative_advantages(returns, config.rollouts_per_history)
             else:
                 advantages = leave_one_out_advantages(returns, config.rollouts_per_history)
+            # Standardising makes the policy gradient blind to this scale while the KL penalty is not: the anchor weight
+            # acts as weight * scale, which is why a weight means different things under different estimators.
+            advantage_scale = advantages.std().item()
             if config.normalize_advantages:
                 advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
             reference_log_distributions = action_log_distributions(reference, history, generated.actions, config.generation)
 
-        record: Metrics = {"step": step, "reward": rewards.mean().item()}
+        record: Metrics = {"step": step, "reward": rewards.mean().item(), "advantage_scale": advantage_scale}
         record |= {f"predicted_{signal}": values.mean().item() for signal, values in vars(feedback).items()}
         if feedback_for_other_user is not None:
             record["predicted_personal_played_ratio"] = (feedback.played_ratio - feedback_for_other_user.played_ratio).mean().item()
@@ -160,7 +171,7 @@ def finetune_with_rl(
                 with autocast(device, config.mixed_precision):
                     log_distributions = action_log_distributions(policy, history, generated.actions, config.generation)
                     loss, loss_terms = policy_improvement_loss(log_distributions, reference_log_distributions, generated, advantages, config, anchor.weight)
-                gradient_norm = clipped_optimizer_step(loss, optimizer, scaler, policy.parameters(), config.max_grad_norm)
+                gradient_norm = clipped_optimizer_step(loss, optimizer, scaler, trainable, config.max_grad_norm)
                 record |= loss_terms | {"gradient_norm": gradient_norm.item(), "reference_kl_weight": anchor.weight}
             if critic is not None:
                 record |= critic.learn(history, generated.actions, returns)
@@ -171,7 +182,7 @@ def finetune_with_rl(
             record |= validation_metrics()
         records.append(record)
 
-    return policy, records
+    return merge_low_rank_updates(policy).eval(), records
 
 
 def discounted_returns(rewards: Tensor, discount: float) -> Tensor:
@@ -216,6 +227,19 @@ def leave_one_out_advantages(returns: Tensor, rollouts_per_history: int) -> Tens
         raise ValueError("a leave-one-out baseline needs at least two rollouts")
     mean_of_others = (grouped.sum(dim=1, keepdim=True) - grouped) / (group_size - 1)
     return (grouped - mean_of_others).reshape(returns.shape)
+
+
+def group_relative_advantages(returns: Tensor, rollouts_per_history: int) -> Tensor:
+    """GRPO's advantages (Shao et al., 2024): each return minus the mean of its group, over the group's standard deviation, step by step.
+
+    A group is the rollouts of one history. Every history therefore weighs the same however much its returns vary,
+    and one whose lists all earn the same return contributes nothing. returns: as for `leave_one_out_advantages`.
+    """
+    if rollouts_per_history < 2:
+        raise ValueError("group-relative advantages need at least two rollouts per history")
+    grouped = returns.reshape(-1, rollouts_per_history, returns.shape[1])
+    centred = grouped - grouped.mean(dim=1, keepdim=True)
+    return (centred / (grouped.std(dim=1, keepdim=True) + GROUP_STD_FLOOR)).reshape(returns.shape)
 
 
 def policy_improvement_loss(

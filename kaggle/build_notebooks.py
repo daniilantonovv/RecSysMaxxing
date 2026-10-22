@@ -141,8 +141,18 @@ from gptrec.data.datasets import download_raw_data, download_side_data, load_ite
 from gptrec.data.preprocess import PreprocessingConfig
 from gptrec.experiment import ADOPTION, DEFAULT_REWARDS, LIKES, RETURN_AFTER_THE_LIST, Experiment, ExperimentConfig, reuse_artifacts, run_smoke_test
 from gptrec.models.backbone import TransformerConfig
-from gptrec.rollout import GenerationConfig
-from gptrec.seeds import run_seeds, run_seeds_smoke_test, summarise_seeds
+from gptrec.rollout import GenerationConfig, RewardSpec
+from gptrec.seeds import (
+    CONTROL_SEED_REPORTS,
+    CONTROL_SEED_STAGES,
+    FRONTIER_SEED_REPORTS,
+    FRONTIER_SEED_STAGES,
+    SEED_REPORTS,
+    SEED_STAGES,
+    run_seeds,
+    run_seeds_smoke_test,
+    summarise_seeds,
+)
 from gptrec.training.rl import RLConfig
 from gptrec.training.supervised import FeedbackLossWeights, OptimizationConfig
 
@@ -827,6 +837,103 @@ CONFIGS = {
         sampled_list_counts=(),
         kl_budgets=(0.5,),
     ),
+    ("kion", "frontier"): replace(
+        KION,
+        kl_weights=(0.1, 0.3, 1.0),
+        rewards=(("return after the list", RETURN_AFTER_THE_LIST),),
+        reward_kl_weights=(0.3,),
+        logged_relevance_weights=(),
+        personal_reward_kl_weights=(),
+        credit_ablation_kl_weights=(),
+        importance_weight_caps=(0.5,),
+        kl_budgets=(0.1, 0.5),
+        estimator_kl_weights=(0.3,),
+        return_label_check=True,
+        capacity_kl_budgets=(0.1, 0.5),
+        low_ranks=(1, 8),
+        group_relative_kl_budgets=(0.1, 0.5),
+        analyse_policy_change=True,
+        guidance_strengths=(1.0, 0.3, 0.1),
+        guided_rewards=(("played ratio", RewardSpec()), ("return after the list", RETURN_AFTER_THE_LIST)),
+        reward_weighted_temperatures=(0.3, 1.0),
+        reward_weighted_responses=("relative_ratio", "played_ratio"),
+        preference_betas=(0.1, 0.5),
+        multi_token_lists=True,
+        interpolation_factors=(0.25, 0.5, 0.75, 1.5, 2.0),
+    ),
+    ("yambda", "frontier"): replace(
+        YAMBDA,
+        preprocessing=replace(YAMBDA.preprocessing, adoption_window_seconds=14 * SECONDS_PER_DAY),
+        reward_model_loss=FeedbackLossWeights(liked=0.25, disliked=0.25, adopts=0.25),
+        kl_weights=(0.05, 0.1),
+        rewards=(),
+        logged_relevance_weights=(),
+        personal_reward_kl_weights=(),
+        importance_weight_caps=(0.5,),
+        sampled_list_counts=(),
+        kl_budgets=(0.5,),
+        return_label_check=True,
+        capacity_kl_budgets=(0.5,),
+        low_ranks=(1,),
+        group_relative_kl_budgets=(0.5,),
+        analyse_policy_change=True,
+        guidance_strengths=(1.0, 0.3, 0.1),
+        guided_rewards=(("played ratio", RewardSpec()), ("adoption", ADOPTION)),
+        reward_weighted_temperatures=(0.3, 1.0),
+        reward_weighted_responses=("relative_ratio",),
+        preference_betas=(0.1,),
+        multi_token_lists=True,
+        multi_token_optimization=OptimizationConfig(epochs=2, batch_size=256, learning_rate=1e-3),
+        multi_token_targets_per_head=4096,
+        interpolation_factors=(0.5, 1.5, 2.0),
+    ),
+    ("kion", "frontier_seeds"): replace(
+        KION,
+        kl_weights=(0.1, 0.3, 1.0),
+        rewards=(),
+        logged_relevance_weights=(),
+        personal_reward_kl_weights=(),
+        credit_ablation_kl_weights=(),
+        sampled_list_counts=(),
+        kl_budgets=(),
+        capacity_kl_budgets=(0.1, 0.5),
+        low_ranks=(1,),
+        analyse_policy_change=True,
+        guidance_strengths=(1.0, 0.3, 0.1),
+        guidance_discounts=(0.0,),
+        guided_rewards=(("played ratio", RewardSpec()),),
+        reward_weighted_temperatures=(0.3, 1.0),
+        reward_weighted_responses=("relative_ratio", "played_ratio"),
+        preference_betas=(0.1, 0.5),
+        multi_token_lists=True,
+        interpolation_factors=(0.25, 0.5, 0.75, 1.5, 2.0),
+    ),
+    ("kion", "control"): replace(
+        KION,
+        kl_weights=(),
+        rewards=(),
+        logged_relevance_weights=(),
+        logged_relevance_kl_weights=(),
+        personal_reward_kl_weights=(),
+        credit_ablation_kl_weights=(),
+        importance_weight_caps=(),
+        sampled_list_counts=(),
+        reward_weighted_temperatures=(0.3, 1.0),
+        reward_weighted_responses=("relative_ratio",),
+        preference_betas=(0.5,),
+        continued_training_control=True,
+    ),
+    ("kion", "quick"): replace(
+        KION,
+        kl_weights=(0.1, 0.3, 1.0),
+        rewards=(),
+        logged_relevance_weights=(),
+        logged_relevance_kl_weights=(),
+        personal_reward_kl_weights=(),
+        credit_ablation_kl_weights=(),
+        importance_weight_caps=(),
+        sampled_list_counts=(),
+    ),
 }
 SMOKE_TEST_USERS = {"yambda": 200, "kion": 30_000}
 """)
@@ -1009,24 +1116,360 @@ def train_offline() -> list[dict]:
     ]
 
 
-# Seed 0 is the seed of notebook 3's sessions, so two more seeds give three per dataset. Two Yambda seeds (about
-# 4.7 hours each) are what fits the 12-hour limit.
-SEED_SESSIONS = {
-    "4_seeds_kion_1_2.ipynb": ("kion", (1, 2)),
-    "4_seeds_yambda_1_2.ipynb": ("yambda", (1, 2)),
-}
+QUICK_INTRODUCTION = markdown(r"""
+# Quick reproduction on KION: RL fine-tuning of a generative recommender against a learned reward model
+
+This notebook reproduces the core of the study end to end, on the KION online-cinema log and under one evaluation
+protocol for every recommender:
+
+1. **Data.** One time axis: the last 7 days of the log are the test period, the 7 days before them the validation
+   period, everything earlier the training period. The catalogue and every item statistic come from the training
+   period only, and so does every training example.
+2. **Base recommender** $\pi_0$: a GPT-2 decoder over item tokens, trained to predict the next item.
+3. **Reward models**: a second GPT-2 predicts the share of a title the user will watch, before the title is watched.
+   Two copies are trained on disjoint halves of the users: the *training* copy produces the rewards, the *held-out*
+   copy only judges.
+4. **RL fine-tuning**: PPO with a KL penalty towards $\pi_0$ (the *anchor*, weight $\beta$) raises the predicted share
+   of lists of ten generated item by item. The reward contains no relevance term: the anchor alone asks for it.
+5. **What it costs and why**: the trade-off between relevance and reward over three anchor weights and the run chosen
+   on validation requests; how much of the gain other users would give the same lists; what happens several steps
+   ahead; and which titles gained and lost.
+
+The configuration is that of the paper's KION sessions with seed 0, so the numbers should match the paper's seed-0
+numbers to about the third decimal (a T4 computes in float16 instead of bfloat16, which adds a little noise).
+
+**How to run.** *Copy & Edit*, choose a GPU (a T4 or a P100 is enough), switch the internet on, and *Run All*;
+nothing has to be attached. The data and any missing package are downloaded, and a smoke test of a few minutes runs
+every stage on a small slice of the log first. Without internet, attach the output of notebook
+`2_prepare_offline_bundle` instead. The stage times at the end say how long each part took: about an hour on Kaggle's
+RTX PRO 6000, several times longer on a T4. Every table is written to `/kaggle/working/kion_quick/artifacts/reports`
+and archived in `kion_quick_reports.zip`.
+
+**What to expect**, from the paper (KION; "±" is the standard deviation over three seeds):
+
+| Quantity | Section | Paper |
+|---|---|---|
+| Reward model: AUC of "watched at least half" on test-period events | 3 | 0.755, against 0.656 for the title's mean share |
+| Base recommender: NDCG@10 of ranked / generated lists | 2 | 0.122 / 0.117 |
+| Main run ($\beta = 0.3$): predicted share, held-out reward model | 4 | +24% ± 2 |
+| Main run: NDCG@10 of generated lists | 4 | −11.5% ± 1.3 |
+| Main run: logged surplus, how much more than usual users took to the recommended titles | 4 | falls in every seed |
+| Run chosen on validation requests ($\beta = 1$): NDCG@10 / predicted share | 5 | −1.8% / +8% |
+| Share of the main run's gain that depends on who receives the list | 6 | 0.2% ± 0.5 |
+| Films' share of impressions, base recommender → main run | 8 | 66% → 80% |
+
+Paper, code and every other session: github.com/daniilantonovv/RecSysMaxxing (`report/paper_v5.pdf`).
+""")
+
+QUICK_SETUP = code(f"""
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+MAX_MOUNT_DEPTH = 4
+manifests = [
+    manifest_path
+    for depth in range(1, MAX_MOUNT_DEPTH + 1)
+    for manifest_path in sorted(Path("/kaggle/input").glob("*/" * depth + "gptrec_bundle/manifest.json"))
+]
+BUNDLE_DIR = manifests[0].parent if manifests else None
+manifest = json.loads((BUNDLE_DIR / "manifest.json").read_text()) if BUNDLE_DIR else None
+print("data and packages from", BUNDLE_DIR or "the internet")
+
+WORKING = Path("{WORKING}")
+os.environ["GPTREC_HOME"] = str(WORKING)
+if BUNDLE_DIR:
+    os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
+sys.path.insert(0, str(SOURCE_DIR))
+
+missing = [package for package in {REQUIRED_PACKAGES} if importlib.util.find_spec(package) is None]
+if missing:
+    from_bundle = ["--no-index", f"--find-links={{BUNDLE_DIR / 'wheels'}}"] if BUNDLE_DIR else []
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", *from_bundle, *missing])
+""")
+
+QUICK_EVENTS = code("""
+if BUNDLE_DIR:
+    raw_events = load_raw_events(DATASET, BUNDLE_DIR / manifest["raw_data"][DATASET])
+    side_data = {name: BUNDLE_DIR / path for name, path in manifest.get("side_data", {}).get(DATASET, {}).items()}
+else:
+    raw_events = load_raw_events(DATASET, download_raw_data(DATASET))
+    side_data = download_side_data(DATASET)
+reactions = load_reactions(DATASET, side_data) if side_data else None
+item_metadata = load_item_metadata(DATASET, side_data) if side_data else None
+print(f"{len(raw_events):,} raw events; beyond them: {sorted(side_data) or 'nothing, so section 8 names no titles'}")
+""")
+
+QUICK_STAGES = [
+    markdown("""
+## 1. Data
+
+Each test user makes one request at the start of the test week. The history is the user's last events before it, the
+target the next 20 titles the user went on to watch. Titles of the history are not recommended again: KION has one row
+per user and title.
+"""),
+    code("""
+experiment = Experiment(config, HOME, device, time_budget_hours=TIME_BUDGET_HOURS)
+summary = experiment.prepare_data(raw_events, reactions)
+del raw_events
+show(summary)
+"""),
+    markdown("""
+## 2. Base recommender
+
+Relevance for the test requests of the base recommender's lists of ten: *ranked* (the catalogue scored once) and
+*generated* item by item (each chosen title appended to the history as if watched, the mode RL fine-tunes), next to
+the most popular titles. Recall, NDCG, MAP and HitRate at 1, 5 and 10 against all next titles, those watched at least
+half (*liked*) or less (*skipped*), and those watched above or below the title's usual share.
+"""),
+    code("""
+show(experiment.pretrain_policy())
+"""),
+    markdown("""
+## 3. Reward models
+
+The predicted share on test-period events, each predicted from the events before it, against three references: the
+training mean, the title's mean and the user's recent mean. Then the *relative share*, the share as a quantile among
+the title's training-period views, which no statistic of the title can predict, and the retention heads.
+"""),
+    code("""
+show(experiment.train_reward_models())
+show_report("reward_model_relative_ratio", index_col=[0, 1])
+show_report("reward_model_retention", index_col=[0, 1, 2])
+"""),
+    markdown("""
+## 4. RL fine-tuning: the main run
+
+PPO with a learned value model and the anchor at $\\beta = 0.3$, for 2,000 iterations of 512 generated lists. The first
+table is the main result: the base recommender against the fine-tuned one on the paper's quantities, with the relative
+change. The *logged* rows need no model: the response the log recorded to recommended titles that users went on to
+watch, per recommended title; the *surplus* is that response above what is usual for each title. The second table gives
+the change user by user, with 95% paired-bootstrap intervals.
+"""),
+    code("""
+MAIN_QUANTITIES = [
+    "top_k/all/ndcg@10",
+    "next_k/all/ndcg@10",
+    "next_k/all/recall@10",
+    "next_k/all/map@10",
+    "next_k/above_usual/ndcg@10",
+    "predicted/train/played_ratio",
+    "predicted/heldout/played_ratio",
+    "predicted/heldout/personal_played_ratio",
+    "next_k/logged/played_ratio_per_item",
+    "next_k/logged/relative_surplus_per_item",
+    "next_k/profile/catalog_coverage",
+    "next_k/profile/top_exposure_share",
+    "next_k/profile/mean_duration_seconds",
+    "training/kl_to_reference",
+]
+main_run = experiment.finetune()
+show(main_run.reindex(MAIN_QUANTITIES))
+show_report("rl_vs_pretrained_significance", index_col=0)
+"""),
+    markdown("""
+## 5. Relevance against reward
+
+One run per anchor weight, 1,000 iterations each. The figures place every run by its NDCG@10 against the predicted
+share, and by the KL distance from $\\pi_0$ it ended at. The last table marks the run that is chosen without the test
+period: the highest predicted share on validation requests within 5% of the base recommender's validation NDCG@10.
+"""),
+    code("""
+show(experiment.sweep_kl_weight())
+show_report("kl_sweep_selection", index_col=0)
+"""),
+    markdown("""
+## 6. Whose gain is it?
+
+Every list is also scored for another user. A gain that other users would give the same lists is a re-weighting of the
+catalogue, not personalisation; the *personal share of the gain* is the rest. Re-ranking the base recommender's 100
+best candidates by the reward model, and by each title's mean share in the training log with no reward model at all,
+reach the same trade-off without RL.
+"""),
+    code("""
+show(experiment.explain_reward_gain())
+"""),
+    markdown("""
+## 7. Several steps ahead
+
+A generated list appends each chosen title as if the user had watched it, though most were not watched. The first
+table gives the hit rate by position after a miss and after a hit at the position before, for ranked and generated
+lists. The second runs the reward model on the users' real next five titles, with the earlier responses as logged or
+as a simulation has to assume them: the bias that assumption brings into the reward of later steps.
+"""),
+    code("""
+show(experiment.analyse_multistep())
+show_report("position_hits", index_col=0)
+show_report("feedback_assumptions_on_real_sequences", header=[0, 1], index_col=0)
+"""),
+    markdown("""
+## 8. What changed in the lists
+
+Relevance by the length of the user's history; how much of each fine-tuned policy's change is one shift per title,
+the same for every user; how impressions spread over the catalogue; films against series; and the titles whose number
+of lists grew and shrank the most.
+"""),
+    code("""
+show(experiment.analyse_users_and_items(item_metadata))
+for report in ["relevance_by_history_length", "exposure_concentration", "impressions_by_content_type"]:
+    show_report(report, index_col=0)
+show_report("largest_impression_changes", index_col=[0, 1])
+"""),
+    markdown("""
+## Summary
+
+The main run once more, the run chosen on validation requests, the time each stage took, and the archive of every
+report.
+"""),
+    code("""
+show(main_run.reindex(MAIN_QUANTITIES))
+show_report("kl_sweep_selection", index_col=0)
+show(pd.read_csv(experiment.reports.directory / "stage_minutes.csv", index_col=0))
+shutil.make_archive(str(WORKING / f"{DATASET}_{SESSION}_reports"), "zip", experiment.reports.directory)
+sorted(path.name for path in experiment.reports.directory.iterdir())
+"""),
+]
 
 
-def seeds_offline(dataset: str, seeds: tuple[int, ...]) -> list[dict]:
+def quick_reproduction() -> list[dict]:
+    """The core of the study on KION, runnable as it is: with the internet on any GPU, or offline with the bundle attached."""
     return [
-        ABSTRACT,
-        markdown("""
+        QUICK_INTRODUCTION,
+        *package_source_cells(f"{WORKING}/src"),
+        markdown("## Setup"),
+        QUICK_SETUP,
+        CHECK_HARDWARE,
+        IMPORTS,
+        markdown("## Configuration"),
+        OFFLINE_CONFIGS,
+        code("""
+DATASET = "kion"
+SESSION = "quick"
+config = CONFIGS[(DATASET, SESSION)]
+HOME = WORKING / f"{DATASET}_{SESSION}"
+TIME_BUDGET_HOURS = 11.0
+"""),
+        QUICK_EVENTS,
+        *SMOKE_TEST,
+        *QUICK_STAGES,
+    ]
+
+
+# Seed 0 is the seed of the single-seed sessions, so two more seeds give three per dataset. Two Yambda seeds (about
+# 4.7 hours each) are what fits the 12-hour limit; two KION seeds of the frontier session take about 4 hours. The
+# control session runs all three seeds itself, so that every comparison it makes stays within one session.
+SEED_SESSIONS = {
+    "4_seeds_kion_1_2.ipynb": ("kion", "seeds", (1, 2)),
+    "4_seeds_yambda_1_2.ipynb": ("yambda", "seeds", (1, 2)),
+    "7_frontier_seeds_kion_1_2.ipynb": ("kion", "frontier_seeds", (1, 2)),
+    "8_control_kion_0_1_2.ipynb": ("kion", "control", (0, 1, 2)),
+}
+SEED_SESSION_STAGES = {
+    "seeds": ("SEED_STAGES", "SEED_REPORTS"),
+    "frontier_seeds": ("FRONTIER_SEED_STAGES", "FRONTIER_SEED_REPORTS"),
+    "control": ("CONTROL_SEED_STAGES", "CONTROL_SEED_REPORTS"),
+}
+SEED_SESSION_PURPOSE = {
+    "seeds": """
 This notebook repeats the core of the study under several random seeds. A seed fixes the initial weights of the
 recommender and of the reward models, the order of their training batches, and the lists sampled while fine-tuning;
 the interaction log and the test requests are the same for every seed. Each table gives the mean and the standard
 deviation over the seeds of this session. Seed 0 is the seed of the single-seed sessions of notebook 3, so it is
 not repeated here.
+""",
+    "frontier_seeds": """
+This notebook repeats under seeds 1 and 2 the results of notebook 6 that change a claim of the paper. Seed 0 is
+notebook 6's own run: every comparison here is configured as it was there, so the three seeds can be pooled. A seed
+fixes the initial weights of the recommender and of the reward models, the order of their training batches, and the
+lists sampled while fine-tuning; the interaction log and the test requests are the same for every seed. Each table
+gives the mean and the standard deviation over the seeds of this session.
+""",
+    "control": """
+This notebook adds the control that the study's positive result lacked. Reward-weighted fine-tuning on the logged
+relative share raised NDCG@10 of the generated lists by 1.9% over the base recommender (notebooks 6 and 7). It trains
+the base recommender for one more epoch at a learning rate ten times lower than its own, and the base recommender
+stopped when its validation loss stopped falling, before its learning rate had decayed: the epoch alone may raise
+relevance. And on KION the base recommender's ranked lists are 4% more relevant than its generated ones, so a
+fine-tuned recommender has to be judged on its ranked lists too.
+
+- **Continued training** is the same epoch with every logged item weighing one: the same optimiser, learning rate,
+  batch size, seed and code, with only the weights removed. What a method gains over it is what its weights add.
+- Every recommender is judged on its **ranked** lists (the catalogue scored once) as well as on its **generated** ones.
+- Seeds 0, 1 and 2 all run here, each with its own base recommender and reward models, and every comparison is made
+  within a seed.
+
+The predictions, and what each outcome changes in the paper, were written down before this run: section "Control for
+continued training" of `report/research_plan_v5.md` in github.com/daniilantonovv/RecSysMaxxing.
+""",
+}
+SEED_SESSION_RUNS = {
+    "seeds": """
+## Runs
+
+Per seed: the base recommender, both reward models, the main fine-tuning run, the anchor sweep, a run under a KL
+budget with its leave-one-out and myopic-credit counterparts, the split of the reward gain between the user and
+other users, the alternatives to on-policy RL, and the rewards with a logged-relevance term and with the relative
+played ratio. A stage whose grid is empty for the dataset is skipped.
+""",
+    "frontier_seeds": """
+## Runs
+
+Per seed: the base recommender, both reward models, the main fine-tuning run and the anchor sweep; RL restricted to
+one score offset per item or to rank-1 updates against full RL, at KL budgets 0.1 and 0.5; the main run split into
+its per-item and per-user parts, and the per-item share of the reward's and of each policy's change; guided decoding
+for the share at discount 0; reward-weighted fine-tuning and within-user DPO on logged responses; one head per list
+position; and weight interpolation and extrapolation of the main run.
+""",
+    "control": """
+## Runs
+
+Per seed: the base recommender and both reward models; then, each for one epoch from that base recommender, continued
+training, reward-weighted fine-tuning on the logged relative share at temperatures 0.3 and 1, and within-user DPO at
+β = 0.5. Every recommender is evaluated on its ranked and its generated lists, and compared user by user with the base
+recommender, and the methods with weights or preferences also with continued training.
+""",
+}
+# What a session's results say, shown after its reports are archived.
+SEED_SESSION_FINDINGS = {
+    "control": [
+        markdown("""
+## What the control shows
+
+First, mean ± standard deviation over the seeds of the quantities the paper reports, one row per recommender and kind
+of list. Then the change of each quantity user by user, relative to what it is compared with and averaged over the
+seeds, in percent: *continued training vs pretrained* is what the extra epoch does by itself, *... vs continued
+training* is what the weights or the preferences add. Last, the per-user comparisons with the number of seeds whose
+95% interval excludes zero.
 """),
+        code("""
+KEY_QUANTITIES = [
+    "all/ndcg@10",
+    "above_usual/ndcg@10",
+    "logged/relative_surplus_per_item",
+    "logged/played_ratio_per_item",
+    "predicted/heldout/played_ratio",
+    "predicted/heldout/personal_played_ratio",
+    "profile/catalog_coverage",
+]
+show(summaries["continued_training_control"].reindex(KEY_QUANTITIES).T)
+mean_comparisons = pd.read_csv(HOME / "over_seeds" / "continued_training_significance_mean.csv", index_col=[0, 1, 2])
+relative_change = (100 * mean_comparisons["change"] / mean_comparisons["before"]).unstack(-1)
+show(relative_change.reindex(columns=KEY_QUANTITIES).dropna(axis=1, how="all").round(2))
+significance = summaries["continued_training_significance"]
+show(significance[significance.index.get_level_values(-1).isin(KEY_QUANTITIES)])
+"""),
+    ],
+}
+
+
+def seeds_offline(dataset: str, session: str, seeds: tuple[int, ...]) -> list[dict]:
+    stages, reports = SEED_SESSION_STAGES[session]
+    return [
+        ABSTRACT,
+        markdown(SEED_SESSION_PURPOSE[session]),
         *package_source_cells(f"{WORKING}/src"),
         markdown("## Setup"),
         OFFLINE_SETUP,
@@ -1037,9 +1480,10 @@ not repeated here.
         code(f"""
 DATASET = "{dataset}"
 SEEDS = {seeds}
-SESSION = "seeds"
+SESSION = "{session}"
 config = CONFIGS[(DATASET, SESSION)]
-HOME = WORKING / f"{{DATASET}}_seeds_{{'_'.join(map(str, SEEDS))}}"
+STAGES, REPORTS = {stages}, {reports}
+HOME = WORKING / f"{{DATASET}}_{{SESSION}}_{{'_'.join(map(str, SEEDS))}}"
 TIME_BUDGET_HOURS = 11.0
 """),
         LOAD_BUNDLED_EVENTS,
@@ -1049,24 +1493,17 @@ TIME_BUDGET_HOURS = 11.0
 Two seeds on a subsample of users, with small models and a few optimisation steps.
 """),
         code("""
-run_seeds_smoke_test(raw_events, config, WORKING / "smoke_test" / DATASET, device, max_users=SMOKE_TEST_USERS[DATASET])
+run_seeds_smoke_test(raw_events, config, WORKING / "smoke_test" / DATASET, device, max_users=SMOKE_TEST_USERS[DATASET], stages=STAGES, reports=REPORTS)
 shutil.rmtree(WORKING / "smoke_test")
 """),
-        markdown("""
-## Runs
-
-Per seed: the base recommender, both reward models, the main fine-tuning run, the anchor sweep, a run under a KL
-budget with its leave-one-out and myopic-credit counterparts, the split of the reward gain between the user and
-other users, the alternatives to on-policy RL, and the rewards with a logged-relevance term and with the relative
-played ratio. A stage whose grid is empty for the dataset is skipped.
-"""),
+        markdown(SEED_SESSION_RUNS[session]),
         code("""
-report_directories = run_seeds(raw_events, config, SEEDS, HOME, device, time_budget_hours=TIME_BUDGET_HOURS)
+report_directories = run_seeds(raw_events, config, SEEDS, HOME, device, stages=STAGES, time_budget_hours=TIME_BUDGET_HOURS)
 del raw_events
 """),
         markdown("## Mean and standard deviation over seeds"),
         code("""
-summaries = summarise_seeds(report_directories, HOME / "over_seeds")
+summaries = summarise_seeds(report_directories, HOME / "over_seeds", REPORTS)
 for report, summary in summaries.items():
     print(report)
     show(summary)
@@ -1080,6 +1517,7 @@ for seed, directory in report_directories.items():
 shutil.make_archive(str(archive), "zip", archive)
 sorted(path.name for path in (archive / "over_seeds").iterdir())
 """),
+        *SEED_SESSION_FINDINGS.get(session, []),
     ]
 
 
@@ -1194,12 +1632,163 @@ sorted(path.name for path in experiment.reports.directory.iterdir())
     ]
 
 
+FRONTIER_SESSIONS = {"6_frontier_kion.ipynb": "kion", "6_frontier_yambda.ipynb": "yambda"}
+
+
+def frontier_offline(dataset: str) -> list[dict]:
+    """What RL learns, how else its optimum can be reached, and what the log alone can teach: the next round of experiments."""
+    if dataset == "kion":
+        long_term_reward = "the return after the list"
+        look_ahead_test = "if look-ahead helps only the return after the list, the sequence matters only for rewards of the whole list"
+    else:
+        long_term_reward = "adoption"
+        look_ahead_test = "if look-ahead helps adoption more than the share, what follows a new track decides whether it sticks"
+    return [
+        ABSTRACT,
+        markdown(f"""
+This session tests the mechanisms behind the earlier findings with current methods. Each section states a
+hypothesis and the result that would refute it.
+
+1. **Is what RL learns one preference per item?** RL restricted to one score offset per item, or to rank-1
+   updates of the transformer (LoRA), at equal KL; the main run split into its per-item and per-user parts; and the
+   per-item share predicted from the reward model before any RL, through the closed form of the anchored objective.
+2. **Does reaching RL's optimum need training at all?** The base recommender steered at inference by
+   $\\pi_0 \\exp(Q/\\beta)$, deciding one position at a time and looking ahead with a learned value of what follows
+   (controlled decoding, Q-sharp), for the share and for {long_term_reward}.
+3. **Can the log alone move the frontier?** Exponential reward-weighted fine-tuning and within-user DPO on logged
+   responses: no reward model, no generated lists.
+4. **Must a list read its own unconfirmed items?** One head per position (multi-token prediction) against generated
+   and ranked lists.
+5. **Cheaper operating points.** Weight interpolation and extrapolation of the main run, and GRPO, against the KL sweep.
+   Every run now records the scale of its advantages before standardisation, which the anchor weight is multiplied by.
+"""),
+        *package_source_cells(f"{WORKING}/src"),
+        markdown("## Setup"),
+        OFFLINE_SETUP,
+        CHECK_HARDWARE,
+        IMPORTS,
+        markdown("## Configuration"),
+        OFFLINE_CONFIGS,
+        code(f"""
+DATASET = "{dataset}"
+SESSION = "frontier"
+config = CONFIGS[(DATASET, SESSION)]
+HOME = WORKING / f"{{DATASET}}_{{SESSION}}"
+TIME_BUDGET_HOURS = 11.0
+"""),
+        LOAD_BUNDLED_EVENTS,
+        *SMOKE_TEST,
+        markdown("## 1. Data, base models and the reference runs"),
+        code("""
+experiment = Experiment(config, HOME, device, time_budget_hours=TIME_BUDGET_HOURS)
+summary = experiment.prepare_data(raw_events, reactions)
+del raw_events
+show(summary)
+show(experiment.pretrain_policy())
+show(experiment.train_reward_models())
+"""),
+        code("""
+show(experiment.finetune())
+show(experiment.sweep_kl_weight())
+show(experiment.sweep_kl_budget())
+show(experiment.compare_advantage_estimators())
+show(experiment.explain_reward_gain())
+"""),
+        *([code("""
+show(experiment.compare_alternatives_to_rl())
+show(experiment.sweep_rewards())
+""")] if dataset == "kion" else []),
+        markdown("""
+## 2. What a return label records
+
+Return rate after an event by the duration of the event's own item and of the next item the user consumed. If the
+next item decides it, as one row per user and title dated by its last view would make it, a reward for returns
+pays for bookkeeping.
+"""),
+        code("""
+show(experiment.diagnose_return_label())
+"""),
+        markdown("""
+## 3. Is what RL learns one preference per item?
+
+**Restricted capacity.** At each KL budget: every weight, one score offset per item, and low-rank updates of the
+transformer. *Refuted* if item offsets reach far less predicted reward than full fine-tuning at the same KL.
+`training/advantage_scale` is the standard deviation of the advantages before standardisation, by which the anchor
+weight is effectively multiplied.
+"""),
+        code("""
+show(experiment.restrict_finetuning_capacity())
+show(experiment.compare_group_relative_advantages())
+"""),
+        markdown("""
+**Decomposition.** The main run's change of log-probabilities, averaged per item, added to the base recommender
+("base + RL's item offsets") and removed from the fine-tuned one ("RL - its item offsets"). Then the share of
+within-history variation that one effect per item explains: in the reward model's predictions (by the closed form,
+the optimal change at any anchor weight) and in what each fine-tuned recommender changed. *A policy above the
+reward's share amplified the per-item part beyond what the optimum asks for.*
+"""),
+        code("""
+show(experiment.decompose_policy_change())
+show_report("policy_change_parts", index_col=0)
+"""),
+        markdown(f"""
+## 4. Reaching the optimum at inference
+
+Each position takes the candidate with the highest $\\log \\pi_0 + Q / \\beta$ among the base recommender's most likely
+next items, after the items already chosen. Discount 0 judges an item by its own reward; discount 0.9 adds a learned
+value of what follows it. *If guidance at discount 0 matches RL at equal relevance, RL is an expensive way to compute
+a closed form; {look_ahead_test}.*
+"""),
+        code("""
+show(experiment.align_at_inference())
+"""),
+        markdown("""
+## 5. Learning from the log alone
+
+Reward-weighted fine-tuning (each logged item weighs $\\exp(r/\\tau)$) and within-user DPO (pairs of items one user
+consumed after the same history, one above and one below the usual response for it). *The test is the logged
+surplus: the one outcome that neither a reward model nor item length can inflate.* Per-user significance tables are in
+the reports.
+"""),
+        code("""
+show(experiment.learn_from_logged_preferences())
+"""),
+        markdown("""
+## 6. Lists that never read an unconfirmed item
+
+One head per position, each predicting the item that many events ahead from the real history only.
+"""),
+        code("""
+show(experiment.predict_lists_without_feedback())
+show_report("multi_token_position_hits", index_col=0)
+"""),
+        markdown("""
+## 7. Operating points in weight space
+
+$\\theta_0 + a(\\theta_{RL} - \\theta_0)$: interpolation below 1, extrapolation above. Every recommender's distance is
+the KL along its own lists.
+"""),
+        code("""
+show(experiment.interpolate_weights())
+"""),
+        markdown("## Reports"),
+        code("""
+show(pd.read_csv(experiment.reports.directory / "stage_minutes.csv", index_col=0))
+shutil.make_archive(str(WORKING / f"{DATASET}_{SESSION}_reports"), "zip", experiment.reports.directory)
+sorted(path.name for path in experiment.reports.directory.iterdir())
+"""),
+    ]
+
+
 if __name__ == "__main__":
+    write_notebook("0_quick_kion.ipynb", quick_reproduction())
     write_notebook("1_full_pipeline_t4.ipynb", full_pipeline_on_t4())
     write_notebook("2_prepare_offline_bundle.ipynb", prepare_offline_bundle())
     write_notebook("3_train_offline.ipynb", train_offline())
-    for name, (dataset, seeds) in SEED_SESSIONS.items():
-        write_notebook(name, seeds_offline(dataset, seeds))
+    for name, (dataset, session, seeds) in SEED_SESSIONS.items():
+        write_notebook(name, seeds_offline(dataset, session, seeds))
     for name, dataset in REVIEW_SESSIONS.items():
         write_notebook(name, review_offline(dataset))
+    for name, dataset in FRONTIER_SESSIONS.items():
+        write_notebook(name, frontier_offline(dataset))
     print("wrote", sorted(path.name for path in OUTPUT_DIRECTORY.glob("*.ipynb")))

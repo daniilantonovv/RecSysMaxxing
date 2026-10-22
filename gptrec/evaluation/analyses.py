@@ -2,7 +2,8 @@
 
 Each answers one question about a policy that the headline metrics leave open: what an item the user never
 consumed does to the rest of a generated list; whether a simulation can trust its assumption about such items;
-who loses relevance; and whether the policy learned something about users or one preference per item.
+who loses relevance; whether the policy learned something about users or one preference per item, and whether
+the reward predicted which; how far a policy moved along its own lists; and what a retention label records.
 """
 
 from __future__ import annotations
@@ -16,13 +17,13 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from gptrec.data.batches import EvalExamples
-from gptrec.data.log import PAD_ITEM, ItemTable
+from gptrec.data.log import PAD_ITEM, InteractionLog, ItemTable
 from gptrec.evaluation.logged_feedback import logged_reward_per_user
 from gptrec.evaluation.relevance import contains, per_user_ranking_metrics
 from gptrec.evaluation.reward_model_metrics import COMPLETED_THRESHOLD, roc_auc
 from gptrec.models.policy import NextItemPolicy
 from gptrec.models.reward_model import RewardModel
-from gptrec.rollout import SimulatedFeedback, simulate_feedback
+from gptrec.rollout import GenerationConfig, SimulatedFeedback, action_log_distributions, simulate_feedback
 from gptrec.training.precision import autocast
 
 
@@ -214,3 +215,116 @@ def largest_impression_changes(before: Tensor, after: Tensor, item_table: pd.Dat
     table = table.assign(change=table["impressions_after"] - table["impressions_before"]).drop(index=PAD_ITEM, errors="ignore")
     gained, lost = table.nlargest(num_items, "change"), table.nsmallest(num_items, "change")
     return pd.concat({"gained": gained, "lost": lost}, names=["direction", "item_token"])
+
+
+@torch.no_grad()
+def mean_logit_shift_per_item(
+    policy: NextItemPolicy, reference: NextItemPolicy, examples: EvalExamples, batch_size: int, device: torch.device, max_requests: int = 4096
+) -> Tensor:
+    """Per item, the mean over histories of log pi(j | h) - log pi_0(j | h), weighted by pi_0(j | h). float [V+1], 0 for padding, on the CPU.
+
+    Adding it to the base recommender's scores gives the part of a fine-tuning that is the same for every user;
+    subtracting it from the fine-tuned recommender's scores leaves the part that depends on who receives the list.
+    """
+    weight_sum = shift_sum = 0.0
+    for batch in examples[:max_requests].batches(batch_size):
+        history = batch.history.to(device)
+        log_probs = F.log_softmax(policy.next_item_logits(history.items, history.lengths).float(), dim=-1).double()
+        reference_log_probs = F.log_softmax(reference.next_item_logits(history.items, history.lengths).float(), dim=-1).double()
+        weight = reference_log_probs.exp()
+        weight_sum = weight_sum + weight.sum(dim=0)
+        shift_sum = shift_sum + (weight * (log_probs - reference_log_probs)).sum(dim=0)
+    offsets = (shift_sum / weight_sum.clamp_min(1e-300)).float().cpu()
+    offsets[PAD_ITEM] = 0.0
+    return offsets
+
+
+def item_effect_share(values: Tensor, items: Tensor, weights: Tensor) -> float:
+    """Share of the within-history variation of `values` that one effect per item explains. values, items, weights: [U, N].
+
+    values[u, n] belongs to item items[u, n] for history u, and weights[u, n] says how much the pair counts, for
+    instance the base recommender's probability of the item. Values are centred within each history, so a constant
+    per history, such as the normaliser of a softmax, explains nothing; the effect of an item is the weighted mean
+    of its centred values. 1: every history orders the items alike; 0: an item's worth depends on the history alone.
+    """
+    values, weights = values.double().cpu(), weights.double().cpu()
+    items = items.cpu()
+    history_mean = (weights * values).sum(dim=1, keepdim=True) / weights.sum(dim=1, keepdim=True).clamp_min(1e-300)
+    centred = values - history_mean
+    size = int(items.max()) + 1
+    weight_per_item = torch.zeros(size, dtype=torch.float64).index_add_(0, items.flatten(), weights.flatten())
+    effect = torch.zeros(size, dtype=torch.float64).index_add_(0, items.flatten(), (weights * centred).flatten()) / weight_per_item.clamp_min(1e-300)
+    residual = centred - effect[items]
+    return float(1.0 - (weights * residual**2).sum() / (weights * centred**2).sum().clamp_min(1e-300))
+
+
+@torch.no_grad()
+def candidate_log_probs(policy: NextItemPolicy, examples: EvalExamples, candidates: Tensor, batch_size: int, device: torch.device) -> Tensor:
+    """log pi(item | history) of each user's candidate items, before any list constraint. candidates: long [U, N] -> float [U, N], on the CPU."""
+    parts = []
+    for batch, batch_candidates in zip(examples.batches(batch_size), candidates.split(batch_size)):
+        history = batch.history.to(device)
+        log_probs = F.log_softmax(policy.next_item_logits(history.items, history.lengths).float(), dim=-1)
+        parts.append(log_probs.gather(1, batch_candidates.to(device)).cpu())
+    return torch.cat(parts)
+
+
+@torch.no_grad()
+def kl_along_lists(
+    policy: NextItemPolicy,
+    reference: NextItemPolicy,
+    examples: EvalExamples,
+    lists: Tensor,
+    generation: GenerationConfig,
+    batch_size: int,
+    device: torch.device,
+    max_requests: int = 4096,
+) -> float:
+    """Mean KL(pi || pi_0) per item over the states in which the given lists were built, under the list constraints. lists: long [U, K]
+
+    One yardstick for every recommender, however it was obtained: a fine-tuning run reports its KL on the lists it
+    sampled while training, a recommender made by interpolating weights has no such record.
+    """
+    total, count = 0.0, 0
+    for batch, batch_lists in zip(examples[:max_requests].batches(batch_size), lists[:max_requests].split(batch_size)):
+        history, actions = batch.history.to(device), batch_lists.to(device)
+        log_distributions = action_log_distributions(policy, history, actions, generation)
+        reference_log_distributions = action_log_distributions(reference, history, actions, generation)
+        kl = (log_distributions.exp() * (log_distributions - reference_log_distributions)).sum(dim=-1)
+        total += kl.sum().item()
+        count += kl.numel()
+    return total / max(1, count)
+
+
+def return_rate_by_duration(log: InteractionLog, num_groups: int = 10) -> pd.DataFrame:
+    """How often a user returns after an event, by the duration of the event's own item and by that of the next item the user consumed.
+
+    Training-period events with a known return outcome and a later event of the same user. Where a log keeps one row
+    per user and item, dated by its last view, a user who moves on to a long series leaves no row until the series is
+    finished, and the event before it looks as if the user stayed away. If the label follows the next item's duration
+    more than the event's own, a reward for returns pays for that bookkeeping. Rows: duration groups, shortest first.
+    """
+    user_starts, user_ends = np.asarray(log.user_offsets[:-1]), np.asarray(log.user_offsets[1:])
+    train_starts, train_ends = log.period_rows("train")
+    boundaries = np.zeros(log.num_events + 1, dtype=np.int64)
+    np.add.at(boundaries, train_starts, 1)
+    np.add.at(boundaries, train_ends, -1)
+    in_train = np.cumsum(boundaries)[:-1] > 0
+    has_next_event = np.ones(log.num_events, dtype=bool)
+    has_next_event[user_ends[user_ends > user_starts] - 1] = False
+    events = np.flatnonzero(in_train & has_next_event & np.asarray(log.returns_known))
+    duration = np.asarray(log.items.duration_seconds, dtype=np.float64)
+    item = np.asarray(log.item)
+    returned = np.asarray(log.returns)[events].astype(np.float64)
+    columns, correlation = {}, {}
+    for name, item_of_event in (("own item", item[events]), ("next item", item[events + 1])):
+        hours = duration[item_of_event] / 3600
+        edges = np.unique(np.quantile(hours, np.linspace(0.0, 1.0, num_groups + 1)))
+        group = np.clip(np.searchsorted(edges, hours, side="right") - 1, 0, len(edges) - 2)
+        groups = np.arange(len(edges) - 1)
+        columns[f"{name}: mean hours"] = pd.Series([hours[group == g].mean() for g in groups], index=groups + 1)
+        columns[f"{name}: return rate"] = pd.Series([returned[group == g].mean() for g in groups], index=groups + 1)
+        correlation[f"{name}: return rate"] = np.corrcoef(np.log1p(hours), returned)[0, 1]
+    table = pd.DataFrame(columns)
+    table.loc["correlation of log hours with return"] = pd.Series(correlation)
+    return table.rename_axis("duration group")

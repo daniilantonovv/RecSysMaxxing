@@ -18,6 +18,15 @@
        compare_list_reward          a reward that depends on the list as a whole, against greedy ways of maximising it
        ablate_sequence_credit       fine-tuning that credits each item with its own reward only, or sees one item per episode
        analyse_multistep
+    7. diagnose_return_label        whether a return label follows the item after the event rather than the event
+       restrict_finetuning_capacity RL that may change only one score offset per item, or only low-rank updates of the transformer
+       compare_group_relative_advantages  GRPO's group-normalised advantages, at equal KL budgets
+       decompose_policy_change      the main run split into one offset per item and the rest; the reward's own split, before any RL
+       align_at_inference           the base recommender steered by the closed form of the anchored objective, with look-ahead
+       learn_from_logged_preferences  reward-weighted fine-tuning and within-user DPO on logged responses: no reward model
+       predict_lists_without_feedback lists from one head per position, none of them reading an unconfirmed item
+       interpolate_weights          operating points between the base and the fine-tuned weights, and beyond
+       control_for_continued_training learning from the log against the same epoch of training without its weights
 
 A stage whose grid of settings is empty in the configuration does nothing.
 
@@ -50,14 +59,20 @@ from gptrec.baselines.suite import BaselineConfig, fit_baselines
 from gptrec.data.batches import EvalExamples, EventWindows, build_eval_examples
 from gptrec.data.log import InteractionLog, Period
 from gptrec.data.preprocess import PreprocessingConfig, build_interaction_log
+from gptrec.decoding import ContinuationTrainingConfig, GuidanceConfig, fit_continuation_values, guided_lists
 from gptrec.evaluation.analyses import (
+    candidate_log_probs,
     exposure_lorenz,
     feedback_assumptions_on_real_sequences,
     impressions_by_attribute,
+    item_effect_share,
+    kl_along_lists,
     largest_impression_changes,
     logit_shift_by_item,
+    mean_logit_shift_per_item,
     position_hits,
     relevance_by_history_length,
+    return_rate_by_duration,
 )
 from gptrec.evaluation.behavior import intra_list_distance, list_overlap, recommendation_profile
 from gptrec.evaluation.policy_report import (
@@ -87,10 +102,13 @@ from gptrec.evaluation.reward_model_metrics import (
     reward_model_report,
     signal_spread_over_candidates,
 )
+from gptrec.models.adapters import Adaptation, interpolated, with_item_offsets
 from gptrec.models.backbone import TransformerConfig
+from gptrec.models.multi_token import MultiTokenHeads, load_multi_token_heads, multi_token_lists, save_multi_token_heads, train_multi_token_heads
 from gptrec.models.policy import NextItemPolicy
 from gptrec.models.reward_model import Feedback, RewardModel
 from gptrec.models.sequence_recommender import NextItemScorer
+from gptrec.models.value_model import ContinuationValueModel
 from gptrec.reports import ReportWriter
 from gptrec.rollout import (
     SIMULATION_ASSUMPTIONS,
@@ -104,8 +122,10 @@ from gptrec.rollout import (
     rerank,
     score_candidates,
 )
-from gptrec.training.checkpoint import load_policy, load_reward_model, save_model
+from gptrec.training.checkpoint import load_continuation_value_model, load_policy, load_reward_model, save_continuation_value_model, save_model
 from gptrec.training.off_policy import LoggedReturnConfig, finetune_on_logged_returns
+from gptrec.training.precision import autocast
+from gptrec.training.preference import LoggedPreferenceConfig, RewardWeightedConfig, finetune_on_logged_preferences, finetune_with_reward_weights
 from gptrec.training.rl import AdvantageEstimator, RLConfig, finetune_with_rl
 from gptrec.training.supervised import (
     FeedbackLossWeights,
@@ -142,6 +162,7 @@ TRAINING_STATISTICS = {
     "training/anchor_weight": "reference_kl_weight",
     "training/clip_fraction": "clip_fraction",
     "training/value_explained_variance": "value_explained_variance",
+    "training/advantage_scale": "advantage_scale",  # standard deviation of the advantages before they are standardised
 }
 END_OF_TRAINING_STEPS = 50  # last iterations of a run over which those are averaged
 INTRA_LIST_DISTANCE = "profile/intra_list_distance"  # mean cosine distance between two items of a list, in the base recommender's embeddings
@@ -187,7 +208,24 @@ RUN_GRIDS = (
     "diversity_weights",
     "diversity_kl_weights",
     "masked_feedback_kl_weights",
+    "return_label_check",
+    "capacity_kl_budgets",
+    "low_ranks",
+    "group_relative_kl_budgets",
+    "analyse_policy_change",
+    "guidance_strengths",
+    "guidance_discounts",
+    "guided_rewards",
+    "reward_weighted_temperatures",
+    "reward_weighted_responses",
+    "preference_betas",
+    "multi_token_lists",
+    "interpolation_factors",
+    "continued_training_control",
 )
+KL_BATCH_SIZE = 256  # histories per pass when the KL along a recommender's lists is measured: each brings K distributions over the catalogue
+CONTINUED_TRAINING = "continued training"  # the base recommender trained one more epoch with every logged item weighing one
+LIST_KINDS = ("ranked", "generated")  # the catalogue scored once, or the list generated item by item
 
 
 @dataclass(frozen=True)
@@ -240,6 +278,33 @@ class ExperimentConfig:
     # What a simulation is told about generated items: a reward model that can be told "unknown" needs no assumption.
     masked_feedback_kl_weights: tuple[float, ...] = ()  # anchor weights at which the policy is fine-tuned against such a model
     hidden_response_share: float = 0.5  # its training windows in which the responses to the last events are hidden
+    # What RL learns, how else its optimum can be reached, and what the log alone can teach. Each stage below does
+    # nothing while its grid is empty or its switch is off.
+    return_label_check: bool = False  # does the return label follow the item after the event rather than the event
+    capacity_kl_budgets: tuple[float, ...] = ()  # KL budgets at which fine-tuning may change only item offsets, or only low-rank updates
+    low_ranks: tuple[int, ...] = (1, 8)
+    item_offset_learning_rate: float = 3e-3  # offsets are scores, not weights: Adam moves each by about this much per step
+    low_rank_learning_rate: float = 1e-4  # low-rank updates need about ten times the learning rate of full fine-tuning
+    group_relative_kl_budgets: tuple[float, ...] = ()  # KL budgets at which GRPO's group-normalised advantages are tried
+    analyse_policy_change: bool = False  # split the main run into one offset per item and the rest; compare with the reward's own split
+    guidance_strengths: tuple[float, ...] = ()  # weights beta of the closed form at which the base recommender is steered at inference
+    guidance_discounts: tuple[float, ...] = (0.0, 0.9)  # 0: each item judged by its own reward; above 0: plus the learned worth of what follows it
+    guidance_candidates: int = 50  # the base recommender's most likely next items that each position chooses from
+    guidance_batch_size: int = 256  # test users per pass; each brings `guidance_candidates` sequences to score
+    guided_rewards: tuple[tuple[str, RewardSpec], ...] = (("played ratio", RewardSpec()),)
+    continuation_training: ContinuationTrainingConfig = field(default_factory=ContinuationTrainingConfig)
+    reward_weighted_temperatures: tuple[float, ...] = ()  # temperatures of fine-tuning in which each logged item weighs exp(response / temperature)
+    reward_weighted_responses: tuple[str, ...] = ("relative_ratio",)  # the logged responses it is tried with
+    preference_betas: tuple[float, ...] = ()  # DPO strengths at which within-user logged preferences are learned
+    preference_margin: float = 0.1  # how far above and below the usual response the two items of a pair lie
+    preference_lookahead: int = 20  # the user's next events a pair is drawn from
+    preference_finetuning: OptimizationConfig = field(default_factory=lambda: OptimizationConfig(epochs=1, learning_rate=1e-4))
+    multi_token_lists: bool = False  # lists from one head per position, none of them reading an unconfirmed item
+    multi_token_optimization: OptimizationConfig = field(default_factory=lambda: OptimizationConfig(epochs=3, learning_rate=1e-3))
+    multi_token_targets_per_head: int | None = None  # positions per batch each head learns from; bounds memory on a large catalogue
+    interpolation_factors: tuple[float, ...] = ()  # points on the line from the base recommender's weights (0) to the main run's (1), and beyond
+    # Learning from the log against the same epoch of training with every item weighing one, on ranked and generated lists.
+    continued_training_control: bool = False
 
     def __post_init__(self) -> None:
         if self.horizon >= self.transformer.max_positions:
@@ -320,6 +385,24 @@ def smoke_test_config(config: ExperimentConfig, max_users: int) -> ExperimentCon
         diversity_weights=(1.0,),
         diversity_kl_weights=(1.0,),
         masked_feedback_kl_weights=(1.0,),
+        return_label_check=True,
+        capacity_kl_budgets=(0.5,),
+        low_ranks=(1,),
+        group_relative_kl_budgets=(0.5,),
+        analyse_policy_change=True,
+        guidance_strengths=(1.0,),
+        guidance_discounts=(0.0, 0.9),
+        guidance_candidates=8,
+        guidance_batch_size=32,
+        continuation_training=replace(config.continuation_training, num_steps=3, histories_per_step=16),
+        reward_weighted_temperatures=(1.0,),
+        preference_betas=(0.1,),
+        preference_finetuning=optimization,
+        multi_token_lists=True,
+        multi_token_optimization=optimization,
+        multi_token_targets_per_head=None if config.multi_token_targets_per_head is None else 16,
+        interpolation_factors=(0.5,),
+        continued_training_control=True,
     )
     return replace(shrunk, **switched_off)
 
@@ -441,6 +524,15 @@ class Experiment:
         self.compare_feedback_masking()
         self.analyse_multistep()
         self.analyse_users_and_items(item_metadata)
+        self.diagnose_return_label()
+        self.restrict_finetuning_capacity()
+        self.compare_group_relative_advantages()
+        self.decompose_policy_change()
+        self.align_at_inference()
+        self.learn_from_logged_preferences()
+        self.predict_lists_without_feedback()
+        self.interpolate_weights()
+        self.control_for_continued_training()
 
     # ---- stage 1: data -------------------------------------------------------------------------------
 
@@ -1101,6 +1193,386 @@ class Experiment:
         return tokens.merge(metadata, on="item_id", how="left").set_axis(pd.RangeIndex(len(tokens), name="item_token"))
 
     # ---- what the stages share -----------------------------------------------------------------------
+
+    # ---- stage 7: what RL learns, inference-time alignment, learning from the log alone ---------------
+
+    @_timed
+    def diagnose_return_label(self) -> pd.DataFrame:
+        """Whether a user's return after an event is recorded by the event or by the item that came after it.
+
+        Data only. On a log with one row per user and item, dated by the last view, the item after an event decides
+        when the next row appears; a reward for returns then pays for the bookkeeping, see `return_rate_by_duration`.
+        """
+        if not self.config.return_label_check:
+            return pd.DataFrame()
+        return self.reports.table("return_rate_by_duration", return_rate_by_duration(self.log))
+
+    @_timed
+    def restrict_finetuning_capacity(self) -> pd.DataFrame:
+        """How much of what RL reaches needs more than one offset per item: fine-tuning held to item offsets or to low-rank updates.
+
+        Every run holds the same KL budgets, so they are compared at an equal distance from the base recommender.
+        Item offsets can only re-weight the catalogue, for everybody alike. Low-rank updates of the transformer change
+        how a history is read, but no item's embedding. If the offsets reach the full run's predicted reward at its
+        relevance, what RL learned is a re-weighting of the catalogue. If rank 1 matches full fine-tuning, a policy
+        gradient carried as little information per episode as is reported for language models.
+        """
+        if not self.config.capacity_kl_budgets:
+            return pd.DataFrame()
+        reward, weight = self.config.rl.reward, self.config.rl.reference_kl_weight
+        # Named and configured like the runs of `sweep_kl_budget`, so a budget both stages share is trained once.
+        full = {f"kl_budget={budget}": self.config.sweep_run(reward, weight, target_kl=budget) for budget in sorted(self.config.capacity_kl_budgets)}
+        capacity_runs = self._capacity_runs
+        metrics = self._sweep("capacity_sweep", full | capacity_runs)
+        curves = {"every weight": self._generated_lists_of(full)}
+        for label in dict.fromkeys(name.split(", kl_budget=")[0] for name in capacity_runs):
+            curves[f"{label} only"] = self._generated_lists_of({name: run for name, run in capacity_runs.items() if name.startswith(f"{label},")})
+        curves["pretrained"] = {"pretrained": self._pretrained_lists}
+        self._trade_off_figures("capacity_sweep", curves, signals=JUDGED_SIGNALS[:1])
+        return metrics.reindex(self._summary_rows)
+
+    @_timed
+    def compare_group_relative_advantages(self) -> pd.DataFrame:
+        """GRPO (Shao et al., 2024), the estimator of current generative-recommender RL, at the KL budgets of the other estimators.
+
+        Group-relative advantages compare the lists sampled for one history with each other and divide by their
+        spread, so every history weighs the same; nothing else differs from the leave-one-out runs.
+        """
+        runs = self._group_relative_runs
+        if not runs:
+            return pd.DataFrame()
+        metrics = self._sweep("group_relative_advantages", runs)
+        leave_one_out = {f"leave-one-out, kl_budget={budget}": None for budget in sorted(self.config.group_relative_kl_budgets)}
+        curves = {
+            "value model": self._generated_lists_of(self._kl_budget_runs),
+            "leave-one-out": self._generated_lists_of(leave_one_out),
+            "group-relative": self._generated_lists_of(runs),
+            "pretrained": {"pretrained": self._pretrained_lists},
+        }
+        self._trade_off_figures("group_relative_advantages", curves, signals=JUDGED_SIGNALS[:1])
+        return metrics.reindex(self._summary_rows)
+
+    @_timed
+    def decompose_policy_change(self) -> pd.DataFrame:
+        """What the main run changed, split into one offset per item and the rest, and whether the reward predicted the split.
+
+        The run's change of log-probabilities is averaged per item over validation histories. "base + RL's item
+        offsets" adds those averages to the base recommender; "RL - its item offsets" removes them from the
+        fine-tuned one. If the first reproduces RL and the second does little, RL learned a re-weighting of the
+        catalogue. The returned table then compares, on the base recommender's candidates for every test user, the
+        share of within-history variation that one effect per item explains: in the reward model's predictions,
+        which the closed form pi* = pi_0 exp(r / beta) / Z turns into the optimal change of log-probabilities at any
+        beta, and in what each fine-tuned recommender changed. RL above the reward's share amplified the item part.
+        """
+        if not self.config.analyse_policy_change:
+            return pd.DataFrame()
+        offsets = mean_logit_shift_per_item(self.rl_policy, self.pretrained_policy, self.examples("validation"), self.config.evaluation_batch_size, self.device)
+        parts = {
+            "pretrained": self._pretrained_lists,
+            "RL": self._rl_lists,
+            "base + RL's item offsets": self._test_evaluation("base + RL's item offsets", with_item_offsets(self.pretrained_policy, offsets)).generated_lists(),
+            "RL - its item offsets": self._test_evaluation("RL - its item offsets", with_item_offsets(self.rl_policy, -offsets)).generated_lists(),
+        }
+        self.reports.table("policy_change_parts", _runs_table(parts).T)
+
+        candidates, examples, batch_size = self._scored_test_candidates, self.examples("test"), self.config.evaluation_batch_size
+        weights = candidates.log_probs.exp()
+        reward = RewardFunction(self.config.rl.reward, self.log.items, "cpu").item_reward(
+            candidates.feedback, candidates.items, feedback_for_other_user=candidates.feedback_for_other_user
+        )
+        shares = {"reward model's predictions (the optimum's change)": item_effect_share(reward, candidates.items, weights)}
+        base_log_probs = candidate_log_probs(self.pretrained_policy, examples, candidates.items, batch_size, self.device)
+        for name, policy in self._finetuned_policies().items():
+            shift = candidate_log_probs(policy, examples, candidates.items, batch_size, self.device) - base_log_probs
+            shares[name] = item_effect_share(shift, candidates.items, weights)
+        return self.reports.table("item_effect_share", pd.Series(shares, name="within-history variation explained by one effect per item"))
+
+    @_timed
+    def align_at_inference(self) -> pd.DataFrame:
+        """The base recommender steered at inference by the closed form of the anchored objective: no fine-tuning.
+
+        Each position takes the candidate with the highest log pi_0 + Q / beta among the base recommender's most likely
+        next items, after the items already chosen (see `guided_lists`). With discount 0, Q is the item's own reward;
+        above 0 it adds the learned worth of what follows. Re-ranking once after the real history is the same closed
+        form without either. For a reward paid only after the last item, nothing but look-ahead can see it coming.
+        Returns one column per method: RL, re-ranking, and each reward, discount and strength of guidance.
+        """
+        strengths = sorted(self.config.guidance_strengths, reverse=True)
+        if not strengths:
+            return pd.DataFrame()
+        guided_by_reward = {}
+        for reward_name, reward in self.config.guided_rewards:
+            reward_function = RewardFunction(reward, self.log.items, self.device)
+            guided = {}
+            for discount in self.config.guidance_discounts:
+                value_model = self._continuation_value_model(reward_name, reward, discount) if discount > 0 else None
+                for strength in strengths:
+                    name = f"{reward_name}, guided, discount={discount}, strength={strength}"
+                    guidance = GuidanceConfig(strength=strength, discount=discount, num_candidates=self.config.guidance_candidates)
+                    guided[name] = self._evaluate_lists(self._guided_lists(reward_function, value_model, guidance))
+            guided_by_reward[reward_name] = guided
+
+        reranked = self._reranked("re-ranking", self._scored_test_candidates, self.config.rl.reward)
+        rl_on_rewards = self._generated_lists_of({f"{name}, kl={weight}": None for name, _ in self.config.rewards for weight in self.config.reward_kl_weights})
+        for (reward_name, reward), guided in zip(self.config.guided_rewards, guided_by_reward.values()):
+            curves = {"RL, anchor sweep": self._generated_lists_of(self._kl_sweep_runs), "re-ranking once, real history": reranked}
+            for discount in self.config.guidance_discounts:
+                curves[f"guided, discount={discount}"] = {name: lists for name, lists in guided.items() if f", discount={discount}," in name}
+            curves["RL on this reward"] = {name: lists for name, lists in rl_on_rewards.items() if name.startswith(f"{reward_name}, kl=")}
+            curves["pretrained"] = {"pretrained": self._pretrained_lists}
+            self._trade_off_figures(f"inference_time_alignment_{_file_name(reward_name)}", curves, signals=(*JUDGED_SIGNALS[:1], *self._signals_rewarded_by([reward])))
+
+        methods = {"pretrained": self._pretrained_lists, "RL": self._rl_lists} | rl_on_rewards | reranked
+        for guided in guided_by_reward.values():
+            methods |= guided
+        return self.reports.table("inference_time_alignment", _runs_table(methods).T)
+
+    @_timed
+    def learn_from_logged_preferences(self) -> pd.DataFrame:
+        """Fine-tuning on logged responses alone, with current preference-learning methods: no reward model, no generated lists.
+
+        Reward-weighted fine-tuning weighs each logged item by exp(response / temperature); within-user DPO learns
+        from pairs of items one user consumed after the same history, one above and one below the usual response for
+        it. Each method is compared with the base recommender user by user, and with RL and liked-only fine-tuning.
+        Returns one column per method.
+        """
+        temperatures, betas = self.config.reward_weighted_temperatures, self.config.preference_betas
+        if not (temperatures or betas):
+            return pd.DataFrame()
+        methods = {}
+        for response in self.config.reward_weighted_responses:
+            for temperature in temperatures:
+                name = f"reward-weighted, {response}, temperature={temperature}"
+                methods[name] = self._test_evaluation(name, self._reward_weighted_policy(response, temperature)).generated_lists()
+        for beta in betas:
+            name = f"within-user DPO, beta={beta}"
+            methods[name] = self._test_evaluation(name, self._logged_preference_policy(beta)).generated_lists()
+
+        pretrained, evaluation_config = self._pretrained_lists, self.config.evaluation_config()
+        for name, lists in methods.items():
+            significance = paired_comparison(pretrained, lists, self.examples("test"), self.log.items, evaluation_config)
+            self.reports.table(f"logged_preferences_significance_{_file_name(name)}", significance)
+        liked_only = self._test_evaluation("liked-only", self._liked_only_policy()).generated_lists()
+        k = max(self.config.ks)
+        curves = {
+            "RL, anchor sweep": self._generated_lists_of(self._kl_sweep_runs),
+            **{name: {name: lists} for name, lists in methods.items()},
+            "liked-only fine-tuning": {"liked-only fine-tuning": liked_only},
+            "pretrained": {"pretrained": pretrained},
+        }
+        measures = [f"all/ndcg@{k}", "logged/relative_surplus_per_item", "profile/catalog_coverage"]
+        self._trade_off_figures("logged_preferences", curves, signals=JUDGED_SIGNALS[:1], measures=measures)
+        everything = {"pretrained": pretrained, "RL": self._rl_lists, "liked-only fine-tuning": liked_only} | methods
+        return self.reports.table("logged_preference_methods", _runs_table(everything).T)
+
+    @_timed
+    def predict_lists_without_feedback(self) -> pd.DataFrame:
+        """Lists from one head per position, read off the real history, against ranked and generated lists of the base recommender.
+
+        Generation feeds each chosen item back as if it had been consumed; ranking scores every position from the real
+        history but with one distribution. One head per position does neither. The position hits show what each costs
+        after a miss and gains after a hit. Returns one column per kind of list.
+        """
+        if not self.config.multi_token_lists:
+            return pd.DataFrame()
+        heads, generation = self._multi_token_heads(), self.config.evaluation_config().generation
+
+        def one_head_per_position(history):
+            return multi_token_lists(self.pretrained_policy, heads, history, generation)
+
+        examples = self.examples("test")
+        predicted = collect_lists(one_head_per_position, examples, self.config.evaluation_batch_size, self.device)
+        pretrained = self._test_evaluation("pretrained", self.pretrained_policy)
+        lists = {"ranked": pretrained.top_k, "generated": pretrained.generated.actions, "one head per position": predicted}
+        self.reports.table("multi_token_position_hits", position_hits(lists, examples.future_items))
+        evaluations = {"ranked": self._evaluate_lists(pretrained.top_k), "generated": pretrained.generated_lists(), "one head per position": self._evaluate_lists(predicted)}
+        return self.reports.table("multi_token_lists", _runs_table(evaluations).T)
+
+    @_timed
+    def interpolate_weights(self) -> pd.DataFrame:
+        """Operating points from weight space: theta_0 + a (theta_RL - theta_0) for each factor a, against the anchor sweep.
+
+        No point needs training. Below 1 the factor interpolates towards the base recommender (WiSE-FT, WARP);
+        above 1 it extrapolates past the main run (ExPO). Every recommender's distance from the base one is measured
+        the same way, as the KL along its own lists, since an interpolated one has no training record.
+        Returns one column per recommender.
+        """
+        factors = sorted(self.config.interpolation_factors)
+        if not factors:
+            return pd.DataFrame()
+        generation, examples = self.config.evaluation_config().generation, self.examples("test")
+
+        def with_distance(name: str, policy: NextItemPolicy) -> ListEvaluation:
+            evaluation = self._test_evaluation(name, policy)
+            lists = evaluation.generated_lists()
+            lists.metrics["kl_along_own_lists"] = kl_along_lists(policy, self.pretrained_policy, examples, evaluation.generated.actions, generation, KL_BATCH_SIZE, self.device)
+            return lists
+
+        interpolations = {f"weights x{factor}": with_distance(f"weights x{factor}", interpolated(self.pretrained_policy, self.rl_policy, factor)) for factor in factors}
+        anchor_sweep = {name: with_distance(name, load_policy(self._sweep_checkpoint(name), self.device)) for name in self._kl_sweep_runs if self._sweep_checkpoint(name).exists()}
+        pretrained = with_distance("pretrained", self.pretrained_policy)
+        main_run = with_distance("rl", self.rl_policy)
+        curves = {
+            "RL, anchor sweep": anchor_sweep,
+            "weights between and beyond": interpolations | {"weights x1.0": main_run},
+            "pretrained": {"pretrained": pretrained},
+        }
+        self._trade_off_figures("weight_interpolation", curves, signals=JUDGED_SIGNALS[:1])
+        k = max(self.config.ks)
+        by_distance = {method: _runs_table(runs).sort_values("kl_along_own_lists") for method, runs in curves.items() if runs}
+        measures = [f"all/ndcg@{k}", "predicted/heldout/played_ratio", "profile/catalog_coverage"]
+        self.reports.figure("weight_interpolation_by_kl", plots.trade_off(by_distance, reward_column="kl_along_own_lists", measure_columns=measures))
+        everything = {"pretrained": pretrained, "RL": main_run} | anchor_sweep | interpolations
+        return self.reports.table("weight_interpolation", _runs_table(everything).T)
+
+    @_timed
+    def control_for_continued_training(self) -> pd.DataFrame:
+        """Learning from the log against the same epoch of training without its weights, on ranked as well as generated lists.
+
+        Reward-weighted fine-tuning and within-user DPO train the base recommender for one more epoch at a lower
+        learning rate. The base recommender stopped when its validation loss stopped falling, before its learning rate
+        had decayed, so that epoch may raise relevance by itself. Continued training, in which every logged item weighs
+        one, is the epoch alone: what a method gains over it is what its weights or its preferences add. Every
+        recommender is judged on its ranked lists too, since the base recommender's ranked lists are its stronger ones
+        on some datasets. Returns one column per recommender and kind of list.
+        """
+        if not self.config.continued_training_control:
+            return pd.DataFrame()
+        recommenders = {"pretrained": self.pretrained_policy, CONTINUED_TRAINING: self._continued_training_policy()}
+        for response in self.config.reward_weighted_responses:
+            for temperature in self.config.reward_weighted_temperatures:
+                recommenders[f"reward-weighted, {response}, temperature={temperature}"] = self._reward_weighted_policy(response, temperature)
+        for beta in self.config.preference_betas:
+            recommenders[f"within-user DPO, beta={beta}"] = self._logged_preference_policy(beta)
+
+        lists: dict[tuple[str, str], ListEvaluation] = {}
+        for name, policy in recommenders.items():
+            evaluation = self._test_evaluation(name, policy)
+            lists[(name, "ranked")] = self._evaluate_lists(evaluation.top_k)
+            lists[(name, "generated")] = evaluation.generated_lists()
+
+        learned_from_the_log = [name for name in recommenders if name not in ("pretrained", CONTINUED_TRAINING)]
+        compared = [(CONTINUED_TRAINING, "pretrained")] + [(name, reference) for reference in ("pretrained", CONTINUED_TRAINING) for name in learned_from_the_log]
+        examples, evaluation_config = self.examples("test"), self.config.evaluation_config()
+        significance = {
+            (f"{name} vs {reference}", kind): paired_comparison(lists[(reference, kind)], lists[(name, kind)], examples, self.log.items, evaluation_config)
+            for name, reference in compared
+            for kind in LIST_KINDS
+        }
+        self.reports.table("continued_training_significance", pd.concat(significance, names=["comparison", "lists", "quantity"]))
+        table = _runs_table({f"{name}, {kind}": evaluation for (name, kind), evaluation in lists.items()}).T
+        return self.reports.table("continued_training_control", table)
+
+    @property
+    def _capacity_runs(self) -> dict[str, RLConfig]:
+        """Runs of the main reward held at each capacity KL budget, with fine-tuning restricted to item offsets or to low-rank updates."""
+        reward, weight = self.config.rl.reward, self.config.rl.reference_kl_weight
+        budgets = sorted(self.config.capacity_kl_budgets)
+        runs = {
+            f"item offsets, kl_budget={budget}": self.config.sweep_run(
+                reward, weight, target_kl=budget, adaptation=Adaptation.ITEM_OFFSETS, learning_rate=self.config.item_offset_learning_rate
+            )
+            for budget in budgets
+        }
+        for rank in self.config.low_ranks:
+            runs |= {
+                f"rank-{rank} updates, kl_budget={budget}": self.config.sweep_run(
+                    reward, weight, target_kl=budget, adaptation=Adaptation.LOW_RANK, low_rank=rank, learning_rate=self.config.low_rank_learning_rate
+                )
+                for budget in budgets
+            }
+        return runs
+
+    @property
+    def _group_relative_runs(self) -> dict[str, RLConfig]:
+        """Runs of the main reward with GRPO's advantages: as many lists per iteration as the other runs, in groups per history."""
+        rollouts = self.config.leave_one_out_rollouts
+        group_relative = {
+            "advantage_estimator": AdvantageEstimator.GROUP_RELATIVE,
+            "rollouts_per_history": rollouts,
+            "histories_per_step": self.config.rl.histories_per_step // rollouts,
+            "normalize_advantages": False,
+        }
+        reward, weight = self.config.rl.reward, self.config.rl.reference_kl_weight
+        return {f"group-relative, kl_budget={budget}": self.config.sweep_run(reward, weight, target_kl=budget, **group_relative) for budget in sorted(self.config.group_relative_kl_budgets)}
+
+    def _finetuned_policies(self) -> dict[str, NextItemPolicy]:
+        """The main run and every trained run of the main reward's sweeps: anchor weights, KL budgets, restricted capacity, GRPO."""
+        full_capacity = [f"kl_budget={budget}" for budget in sorted(self.config.capacity_kl_budgets)]
+        names = dict.fromkeys([*self._kl_sweep_runs, *self._kl_budget_runs, *full_capacity, *self._capacity_runs, *self._group_relative_runs])
+        return {"RL": self.rl_policy} | {name: load_policy(self._sweep_checkpoint(name), self.device) for name in names if self._sweep_checkpoint(name).exists()}
+
+    def _continuation_value_model(self, reward_name: str, reward: RewardSpec, discount: float) -> ContinuationValueModel:
+        """U for `reward` at `discount`, learned from the base recommender's own lists on first use."""
+        path = self.checkpoints / "continuation_values" / f"{_file_name(reward_name)}_discount_{discount}.pt"
+        if not path.exists():
+            training = replace(
+                self.config.continuation_training,
+                history_len=self.config.history_len,
+                max_future=self.config.max_future,
+                min_history=self.config.rl.min_history,
+                generation=replace(self.config.rl.generation, horizon=self.config.horizon),
+                discount=discount,
+                mixed_precision=self.config.rl.mixed_precision,
+            )
+            value_model, records = fit_continuation_values(self.pretrained_policy, self.reward_models["train"], self.log, reward, training, self.device)
+            save_continuation_value_model(value_model, path)
+            self.reports.table(f"continuation_training_{_file_name(reward_name)}_discount_{discount}", pd.DataFrame(records).set_index("step"))
+        return load_continuation_value_model(path, self.device)
+
+    def _guided_lists(self, reward_function: RewardFunction, value_model: ContinuationValueModel | None, guidance: GuidanceConfig) -> torch.Tensor:
+        """One guided list per test user, steered by the "train" reward model."""
+        generation = self.config.evaluation_config().generation
+
+        def guided(history):
+            with autocast(self.device, self.config.rl.mixed_precision):
+                return guided_lists(self.pretrained_policy, self.reward_models["train"], reward_function, value_model, history, guidance, generation)
+
+        return collect_lists(guided, self.examples("test"), self.config.guidance_batch_size, self.device)
+
+    def _reward_weighted_policy(self, response: str, temperature: float) -> NextItemPolicy:
+        path = self.checkpoints / f"policy_reward_weighted_{response}_{temperature}.pt"
+        if not path.exists():
+            config = RewardWeightedConfig(self.config.preference_finetuning, response, temperature)
+            policy, history = finetune_with_reward_weights(self.pretrained_policy, self.log, config, self.config.window_stride, self.device)
+            save_model(policy, path)
+            self.reports.table(f"reward_weighted_training_{response}_{temperature}", pd.DataFrame(history).set_index("epoch"))
+        return load_policy(path, self.device)
+
+    def _continued_training_policy(self) -> NextItemPolicy:
+        """The base recommender trained for one more epoch exactly as reward-weighted fine-tuning trains it, with every logged item weighing one."""
+        path = self.checkpoints / "policy_continued_training.pt"
+        if not path.exists():
+            config = RewardWeightedConfig(self.config.preference_finetuning, response=None)
+            policy, history = finetune_with_reward_weights(self.pretrained_policy, self.log, config, self.config.window_stride, self.device)
+            save_model(policy, path)
+            self.reports.table("continued_next_item_training", pd.DataFrame(history).set_index("epoch"))
+        return load_policy(path, self.device)
+
+    def _logged_preference_policy(self, beta: float) -> NextItemPolicy:
+        path = self.checkpoints / f"policy_within_user_dpo_{beta}.pt"
+        if not path.exists():
+            config = LoggedPreferenceConfig(self.config.preference_finetuning, beta, self.config.preference_margin, self.config.preference_lookahead)
+            policy, history = finetune_on_logged_preferences(self.pretrained_policy, self.log, config, self.config.window_stride, self.device)
+            save_model(policy, path)
+            self.reports.table(f"within_user_dpo_training_{beta}", pd.DataFrame(history).set_index("epoch"))
+        return load_policy(path, self.device)
+
+    def _multi_token_heads(self) -> MultiTokenHeads:
+        path = self.checkpoints / "multi_token_heads.pt"
+        if not path.exists():
+            heads, history = train_multi_token_heads(
+                self.pretrained_policy,
+                self.log,
+                self.config.horizon,
+                self.config.multi_token_optimization,
+                self.config.window_stride,
+                self.device,
+                max_targets_per_head=self.config.multi_token_targets_per_head,
+            )
+            save_multi_token_heads(heads, path)
+            self.reports.table("multi_token_training", pd.DataFrame(history).set_index("epoch"))
+        return load_multi_token_heads(path, self.device)
 
     @cached_property
     def log(self) -> InteractionLog:
