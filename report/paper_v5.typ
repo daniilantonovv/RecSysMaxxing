@@ -57,7 +57,7 @@
 )[*Answer to #question.* #body]
 
 // One box of the pipeline figure.
-#let stage(title, body) = rect(width: 100%, height: 2.45cm, inset: 5pt, radius: 2pt, stroke: 0.6pt + luma(90))[
+#let stage(title, body) = rect(width: 100%, height: 2.75cm, inset: 5pt, radius: 2pt, stroke: 0.6pt + luma(90))[
   #set text(size: 7.5pt)
   #set par(justify: false, leading: 0.45em)
   #set align(left + top)
@@ -114,8 +114,8 @@ the trade-off, we test why it arises and what moves it, with methods from the po
 restricted to one score offset per item or to rank-1 updates, the policy's change split into its per-item part and
 the rest, the closed-form optimum computed at inference with and without a learned look-ahead, learning from logged
 responses alone, and lists predicted position by position from the real history. The study answers five questions
-about RL fine-tuning of a next-item recommender. @tab-answers answers each briefly, @sec-q1 to @sec-q5 give the
-evidence, and @tab-glossary defines the terms that recur.
+about RL fine-tuning of a next-item recommender. @tab-answers answers each briefly, @sec-results gives the evidence
+with one subsection per question, and @tab-glossary defines the terms that recur.
 
 #figure(
   results-table(
@@ -410,10 +410,10 @@ predicted by the training reward model by 20.3% and by the held-out one by 21.5%
 The two rise together from the first evaluation on validation requests, and 85% of the gain and 90% of the loss of
 NDCG\@10 arrive within the first 250 iterations; the policy then moves on, from 0.06 to 0.09 nats per item from
 $pi_0$, for little more reward (@fig-training). The log does not show users responding better. Against what is usual for each title, users took to the recommended
-titles less: the logged surplus falls from 0.0012 to 0.0005, by 0.0007 in every seed, and by 15% at the
-validation-selected $beta = 1$. The logged share per recommended item, which mostly counts hits, rises by
-$1.1% plus.minus 0.4$: users reached fewer recommended titles (hits $-8.3%$) and finished those more often ($+9.8%$),
-because they are titles everybody finishes.
+titles less: the logged surplus falls by $61% plus.minus 2$, from 0.0012 to 0.0005 per recommended title, and by 15%
+at the validation-selected $beta = 1$. The logged share per recommended item, which mostly counts hits, rises by
+$1.1% plus.minus 0.4$: users reached fewer recommended titles (hits $-8.8% plus.minus 0.9$) and finished those more
+often ($+10.8% plus.minus 1.6$), because they are titles everybody finishes.
 
 *How the recommendations differ.* Films take 66% of the impressions of the base recommender's generated lists and
 80% of the main run's (89% at $beta = 0.1$, and all of them without an anchor). The titles that gained most are films
@@ -444,7 +444,8 @@ $89% plus.minus 4$ at 0.5, at an NDCG\@10 within 0.002 of full RL's (@tab-mechan
 another user earn the same gain (personal share $0.2% plus.minus 0.5%$), and re-ranking by the item's mean share in
 the training log, with no reward model, reaches the main run's point (predicted share 0.549 at NDCG\@10 0.109,
 against 0.553 at 0.105). The main run's average change per item, added to $pi_0$, reproduces $88% plus.minus 2$ of
-its gain and all of its loss of relevance (NDCG\@10 $-11.0% plus.minus 1.8$ against $-11.6% plus.minus 1.5$).
+its gain and all of its loss of relevance (NDCG\@10 $-11.0% plus.minus 1.8$ against RL's own $-11.6% plus.minus 1.5$
+in the same sessions).
 Removed from the fine-tuned policy, it leaves
 $21% plus.minus 2$ of the gain at the base relevance ($-0.1% plus.minus 0.4$) and a personal part of the predicted
 share $20% plus.minus 3$ above the base recommender's: the two parts pull personalisation in opposite directions and
@@ -781,7 +782,7 @@ every table are in `github.com/daniilantonovv/RecSysMaxxing`.
 
 #heading(numbering: none)[References]
 #{
-  set text(size: 7.5pt)
+  set text(size: 7pt)
   set par(justify: false, leading: 0.5em)
   columns(2, gutter: 14pt, bibliography("references.bib", style: "ieee", title: none))
 }
