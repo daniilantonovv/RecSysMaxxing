@@ -1,0 +1,519 @@
+comparison,lists,quantity,before,after,change,change_ci_low,change_ci_high,num_users
+continued training vs pretrained,ranked,all/ndcg@10,3,3,3,3,3,3
+continued training vs pretrained,ranked,liked/ndcg@10,3,3,3,3,3,3
+continued training vs pretrained,ranked,skipped/recall@10,3,3,3,3,3,3
+continued training vs pretrained,ranked,above_usual/ndcg@10,3,3,3,3,3,3
+continued training vs pretrained,ranked,below_usual/recall@10,3,3,3,3,3,3
+continued training vs pretrained,ranked,new/ndcg@10,3,3,3,3,3,3
+continued training vs pretrained,ranked,repeat/ndcg@10,0,0,0,0,0,3
+continued training vs pretrained,ranked,logged/played_ratio_per_item,3,3,3,3,3,3
+continued training vs pretrained,ranked,logged/relative_surplus_per_item,3,3,3,3,3,3
+continued training vs pretrained,ranked,logged/liked_per_item,3,3,3,3,3,3
+continued training vs pretrained,ranked,logged/adopted_per_item,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/played_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/personal_played_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/relative_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/session_continues,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/returns,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/is_chosen,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/liked,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/disliked,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/adopts,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/train/returns_after_list,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/played_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/relative_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/session_continues,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/returns,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/is_chosen,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/liked,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/disliked,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/adopts,3,3,3,3,3,3
+continued training vs pretrained,ranked,predicted/heldout/returns_after_list,3,3,3,3,3,3
+continued training vs pretrained,generated,all/ndcg@10,3,3,3,3,3,3
+continued training vs pretrained,generated,liked/ndcg@10,3,3,3,3,3,3
+continued training vs pretrained,generated,skipped/recall@10,3,3,3,3,3,3
+continued training vs pretrained,generated,above_usual/ndcg@10,3,3,3,3,3,3
+continued training vs pretrained,generated,below_usual/recall@10,3,3,3,3,3,3
+continued training vs pretrained,generated,new/ndcg@10,3,3,3,3,3,3
+continued training vs pretrained,generated,repeat/ndcg@10,0,0,0,0,0,3
+continued training vs pretrained,generated,logged/played_ratio_per_item,3,3,3,3,3,3
+continued training vs pretrained,generated,logged/relative_surplus_per_item,3,3,3,3,3,3
+continued training vs pretrained,generated,logged/liked_per_item,3,3,3,3,3,3
+continued training vs pretrained,generated,logged/adopted_per_item,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/played_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/personal_played_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/relative_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/session_continues,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/returns,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/is_chosen,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/liked,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/disliked,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/adopts,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/train/returns_after_list,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/played_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/relative_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/session_continues,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/returns,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/is_chosen,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/liked,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/disliked,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/adopts,3,3,3,3,3,3
+continued training vs pretrained,generated,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,all/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,liked/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,skipped/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,above_usual/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,below_usual/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,new/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,repeat/ndcg@10,0,0,0,0,0,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,logged/played_ratio_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,logged/relative_surplus_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,logged/liked_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,logged/adopted_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/train/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",ranked,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,all/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,liked/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,skipped/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,above_usual/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,below_usual/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,new/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,repeat/ndcg@10,0,0,0,0,0,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,logged/played_ratio_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,logged/relative_surplus_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,logged/liked_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,logged/adopted_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/train/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs pretrained",generated,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,all/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,liked/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,skipped/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,above_usual/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,below_usual/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,new/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,repeat/ndcg@10,0,0,0,0,0,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,logged/played_ratio_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,logged/relative_surplus_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,logged/liked_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,logged/adopted_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/train/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",ranked,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,all/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,liked/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,skipped/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,above_usual/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,below_usual/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,new/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,repeat/ndcg@10,0,0,0,0,0,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,logged/played_ratio_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,logged/relative_surplus_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,logged/liked_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,logged/adopted_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/train/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs pretrained",generated,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,all/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,liked/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,skipped/recall@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,above_usual/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,below_usual/recall@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,new/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,repeat/ndcg@10,0,0,0,0,0,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,logged/played_ratio_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,logged/relative_surplus_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,logged/liked_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,logged/adopted_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/session_continues,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/returns,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/is_chosen,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/liked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/disliked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/adopts,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/train/returns_after_list,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/session_continues,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/returns,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/is_chosen,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/liked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/disliked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/adopts,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",ranked,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,all/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,liked/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,skipped/recall@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,above_usual/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,below_usual/recall@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,new/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,repeat/ndcg@10,0,0,0,0,0,3
+"within-user DPO, beta=0.5 vs pretrained",generated,logged/played_ratio_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,logged/relative_surplus_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,logged/liked_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,logged/adopted_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/session_continues,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/returns,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/is_chosen,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/liked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/disliked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/adopts,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/train/returns_after_list,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/session_continues,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/returns,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/is_chosen,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/liked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/disliked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/adopts,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs pretrained",generated,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,all/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,liked/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,skipped/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,above_usual/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,below_usual/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,new/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,repeat/ndcg@10,0,0,0,0,0,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,logged/played_ratio_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,logged/relative_surplus_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,logged/liked_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,logged/adopted_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/train/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",ranked,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,all/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,liked/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,skipped/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,above_usual/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,below_usual/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,new/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,repeat/ndcg@10,0,0,0,0,0,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,logged/played_ratio_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,logged/relative_surplus_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,logged/liked_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,logged/adopted_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/train/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=0.3 vs continued training",generated,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,all/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,liked/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,skipped/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,above_usual/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,below_usual/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,new/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,repeat/ndcg@10,0,0,0,0,0,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,logged/played_ratio_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,logged/relative_surplus_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,logged/liked_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,logged/adopted_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/train/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",ranked,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,all/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,liked/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,skipped/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,above_usual/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,below_usual/recall@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,new/ndcg@10,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,repeat/ndcg@10,0,0,0,0,0,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,logged/played_ratio_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,logged/relative_surplus_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,logged/liked_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,logged/adopted_per_item,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/train/returns_after_list,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/session_continues,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/returns,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/is_chosen,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/liked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/disliked,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/adopts,3,3,3,3,3,3
+"reward-weighted, relative_ratio, temperature=1.0 vs continued training",generated,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,all/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,liked/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,skipped/recall@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,above_usual/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,below_usual/recall@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,new/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,repeat/ndcg@10,0,0,0,0,0,3
+"within-user DPO, beta=0.5 vs continued training",ranked,logged/played_ratio_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,logged/relative_surplus_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,logged/liked_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,logged/adopted_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/session_continues,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/returns,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/is_chosen,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/liked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/disliked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/adopts,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/train/returns_after_list,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/session_continues,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/returns,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/is_chosen,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/liked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/disliked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/adopts,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",ranked,predicted/heldout/returns_after_list,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,all/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,liked/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,skipped/recall@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,above_usual/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,below_usual/recall@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,new/ndcg@10,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,repeat/ndcg@10,0,0,0,0,0,3
+"within-user DPO, beta=0.5 vs continued training",generated,logged/played_ratio_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,logged/relative_surplus_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,logged/liked_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,logged/adopted_per_item,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/played_ratio_for_other_user,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/personal_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/personal_relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/session_continues,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/returns,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/is_chosen,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/chosen_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/liked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/disliked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/adopts,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/train/returns_after_list,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/played_ratio_for_other_user,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/personal_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/personal_relative_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/session_continues,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/returns,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/is_chosen,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/chosen_played_ratio,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/liked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/disliked,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/adopts,3,3,3,3,3,3
+"within-user DPO, beta=0.5 vs continued training",generated,predicted/heldout/returns_after_list,3,3,3,3,3,3

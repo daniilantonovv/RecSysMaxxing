@@ -1,0 +1,305 @@
+{
+  "analyse_policy_change": false,
+  "baselines": {
+    "bert4rec_mask_probability": 0.2,
+    "markov_chain_successors": 200,
+    "optimization": {
+      "batch_size": 512,
+      "early_stopping_patience": 2,
+      "epochs": 30,
+      "learning_rate": 0.001,
+      "max_grad_norm": 1.0,
+      "mixed_precision": true,
+      "seed": 1,
+      "warmup_steps": 500,
+      "weight_decay": 0.01
+    },
+    "sasrec_negatives": 1
+  },
+  "capacity_kl_budgets": [],
+  "choice_reward_kl_weights": [],
+  "continuation_training": {
+    "discount": 0.9,
+    "generation": {
+      "block_generated_items": true,
+      "block_history_items": false,
+      "greedy": false,
+      "horizon": 10,
+      "sample_from_top": null,
+      "temperature": 1.0
+    },
+    "histories_per_step": 512,
+    "history_len": 118,
+    "learning_rate": 0.0001,
+    "max_future": 20,
+    "max_grad_norm": 1.0,
+    "min_history": 8,
+    "mixed_precision": false,
+    "num_steps": 1000,
+    "seed": 1,
+    "simulated_feedback": "expected"
+  },
+  "continued_training_control": true,
+  "credit_ablation_kl_weights": [],
+  "diversity_kl_weights": [
+    0.3
+  ],
+  "diversity_weights": [],
+  "estimator_kl_weights": [],
+  "evaluate_sweeps_on_validation": true,
+  "evaluation_batch_size": 2048,
+  "group_relative_kl_budgets": [],
+  "guidance_batch_size": 256,
+  "guidance_candidates": 50,
+  "guidance_discounts": [
+    0.0,
+    0.9
+  ],
+  "guidance_strengths": [],
+  "guided_rewards": [
+    [
+      "played ratio",
+      {
+        "adoption_weight": 0.0,
+        "disliked_weight": 0.0,
+        "diversity_weight": 0.0,
+        "final_returns_weight": 0.0,
+        "liked_weight": 0.0,
+        "logged_relevance_weight": 0.0,
+        "played_ratio_weight": 1.0,
+        "ratio_baseline": "none",
+        "relative_ratio_weight": 0.0,
+        "returns_weight": 0.0,
+        "session_continues_weight": 0.0,
+        "weigh_by_choice": false,
+        "weigh_ratio_by_duration": false
+      }
+    ]
+  ],
+  "hidden_response_share": 0.5,
+  "high_learning_rate_factor": null,
+  "horizon": 10,
+  "importance_weight_caps": [],
+  "interpolation_factors": [],
+  "item_offset_learning_rate": 0.003,
+  "kl_budgets": [],
+  "kl_weights": [],
+  "ks": [
+    1,
+    5,
+    10
+  ],
+  "leave_one_out_rollouts": 4,
+  "liked_finetuning": {
+    "batch_size": 128,
+    "early_stopping_patience": 2,
+    "epochs": 1,
+    "learning_rate": 0.0001,
+    "max_grad_norm": 1.0,
+    "mixed_precision": true,
+    "seed": 1,
+    "warmup_steps": 500,
+    "weight_decay": 0.01
+  },
+  "logged_relevance_kl_weights": [],
+  "logged_relevance_weights": [],
+  "logged_returns": {
+    "discount": 0.9,
+    "importance_weight_cap": 0.5,
+    "importance_weight_factors": 10,
+    "optimization": {
+      "batch_size": 128,
+      "early_stopping_patience": 2,
+      "epochs": 1,
+      "learning_rate": 0.0001,
+      "max_grad_norm": 1.0,
+      "mixed_precision": true,
+      "seed": 1,
+      "warmup_steps": 500,
+      "weight_decay": 0.01
+    },
+    "reward": {
+      "adoption_weight": 0.0,
+      "disliked_weight": 0.0,
+      "diversity_weight": 0.0,
+      "final_returns_weight": 0.0,
+      "liked_weight": 0.0,
+      "logged_relevance_weight": 0.0,
+      "played_ratio_weight": 1.0,
+      "ratio_baseline": "none",
+      "relative_ratio_weight": 0.0,
+      "returns_weight": 0.0,
+      "session_continues_weight": 0.0,
+      "weigh_by_choice": false,
+      "weigh_ratio_by_duration": false
+    }
+  },
+  "low_rank_learning_rate": 0.0001,
+  "low_ranks": [
+    1,
+    8
+  ],
+  "masked_feedback_kl_weights": [],
+  "max_future": 20,
+  "max_users": null,
+  "multi_token_lists": false,
+  "multi_token_optimization": {
+    "batch_size": 128,
+    "early_stopping_patience": 2,
+    "epochs": 3,
+    "learning_rate": 0.001,
+    "max_grad_norm": 1.0,
+    "mixed_precision": true,
+    "seed": 1,
+    "warmup_steps": 500,
+    "weight_decay": 0.01
+  },
+  "multi_token_targets_per_head": null,
+  "personal_reward_kl_weights": [],
+  "policy_optimization": {
+    "batch_size": 512,
+    "early_stopping_patience": 2,
+    "epochs": 30,
+    "learning_rate": 0.001,
+    "max_grad_norm": 1.0,
+    "mixed_precision": true,
+    "seed": 1,
+    "warmup_steps": 500,
+    "weight_decay": 0.01
+  },
+  "preference_betas": [
+    0.5
+  ],
+  "preference_finetuning": {
+    "batch_size": 128,
+    "early_stopping_patience": 2,
+    "epochs": 1,
+    "learning_rate": 0.0001,
+    "max_grad_norm": 1.0,
+    "mixed_precision": true,
+    "seed": 1,
+    "warmup_steps": 500,
+    "weight_decay": 0.01
+  },
+  "preference_lookahead": 20,
+  "preference_margin": 0.1,
+  "preprocessing": {
+    "adoption_window_seconds": null,
+    "max_items": 20000,
+    "min_item_events": 10,
+    "min_user_events": 5,
+    "reaction_window_seconds": 86400,
+    "return_window_seconds": 604800,
+    "session_gap_seconds": 0,
+    "test_days": 7,
+    "validation_days": 7
+  },
+  "relative_reward_kl_weights": [],
+  "relevance_tolerance": 0.05,
+  "rerank_candidates": 100,
+  "rerank_relevance_weights": [
+    0.0,
+    0.01,
+    0.03,
+    0.1,
+    0.3,
+    1.0
+  ],
+  "return_label_check": false,
+  "reward_kl_weights": [
+    0.1,
+    0.3
+  ],
+  "reward_model_loss": {
+    "adopts": 0.0,
+    "disliked": 0.0,
+    "is_chosen": 0.25,
+    "liked": 0.0,
+    "played_ratio": 1.0,
+    "relative_ratio": 0.5,
+    "returns": 0.25,
+    "session_continues": 0.25
+  },
+  "reward_model_optimization": {
+    "batch_size": 512,
+    "early_stopping_patience": 2,
+    "epochs": 15,
+    "learning_rate": 0.001,
+    "max_grad_norm": 1.0,
+    "mixed_precision": true,
+    "seed": 1,
+    "warmup_steps": 500,
+    "weight_decay": 0.01
+  },
+  "reward_weighted_responses": [
+    "relative_ratio"
+  ],
+  "reward_weighted_temperatures": [
+    0.3,
+    1.0
+  ],
+  "rewards": [],
+  "rl": {
+    "adaptation": "full",
+    "advantage_estimator": "gae",
+    "anchor_adaptation_rate": 0.03,
+    "discount": 0.99,
+    "entropy_weight": 0.0,
+    "evaluate_every": 250,
+    "gae_lambda": 0.9,
+    "generation": {
+      "block_generated_items": true,
+      "block_history_items": true,
+      "greedy": false,
+      "horizon": 10,
+      "sample_from_top": null,
+      "temperature": 1.0
+    },
+    "histories_per_step": 512,
+    "history_len": 118,
+    "learning_rate": 1e-05,
+    "low_rank": 1,
+    "max_future": 20,
+    "max_grad_norm": 1.0,
+    "min_history": 3,
+    "mixed_precision": true,
+    "normalize_advantages": true,
+    "num_steps": 2000,
+    "ppo_clip": 0.2,
+    "ppo_epochs": 4,
+    "reference_kl_weight": 0.3,
+    "reward": {
+      "adoption_weight": 0.0,
+      "disliked_weight": 0.0,
+      "diversity_weight": 0.0,
+      "final_returns_weight": 0.0,
+      "liked_weight": 0.0,
+      "logged_relevance_weight": 0.0,
+      "played_ratio_weight": 1.0,
+      "ratio_baseline": "none",
+      "relative_ratio_weight": 0.0,
+      "returns_weight": 0.0,
+      "session_continues_weight": 0.0,
+      "weigh_by_choice": false,
+      "weigh_ratio_by_duration": false
+    },
+    "rollouts_per_history": 1,
+    "seed": 1,
+    "simulated_feedback": "expected",
+    "target_kl": null,
+    "value_learning_rate": 0.0001,
+    "value_warmup_steps": 50
+  },
+  "sample_from_top": 4,
+  "sampled_feedback_kl_weights": [],
+  "sampled_list_counts": [],
+  "sweep_steps": 1000,
+  "transformer": {
+    "dropout": 0.2,
+    "hidden_size": 256,
+    "max_positions": 48,
+    "num_heads": 4,
+    "num_layers": 4
+  },
+  "window_stride": 24
+}

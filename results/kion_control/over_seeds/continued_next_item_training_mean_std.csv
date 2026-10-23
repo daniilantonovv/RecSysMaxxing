@@ -1,0 +1,2 @@
+epoch,train_loss,validation_loss
+1,6.1364 ± 0.0141,6.5919 ± 0.0026
