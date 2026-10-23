@@ -1,0 +1,235 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="516" height="357" viewBox="0 0 516 357" font-family="New Computer Modern">
+<line x1="31.0" y1="13" x2="53.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
+<circle cx="42.0" cy="13.0" r="4.2" fill="#0072B2"/>
+<text x="60.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, generated lists</text>
+<line x1="271.0" y1="13" x2="293.0" y2="13" stroke="#E69F00" stroke-width="1.6"/>
+<polygon points="282.0,8.0 286.8,16.7 277.2,16.7" fill="#E69F00"/>
+<text x="300.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL main run, generated lists</text>
+<line x1="48.0" y1="55" x2="48.0" y2="161" stroke="#e4e4e4"/>
+<text x="48.0" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">1</text>
+<line x1="69.1" y1="55" x2="69.1" y2="161" stroke="#e4e4e4"/>
+<text x="69.1" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">2</text>
+<line x1="90.2" y1="55" x2="90.2" y2="161" stroke="#e4e4e4"/>
+<text x="90.2" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">3</text>
+<line x1="111.3" y1="55" x2="111.3" y2="161" stroke="#e4e4e4"/>
+<text x="111.3" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">4</text>
+<line x1="132.4" y1="55" x2="132.4" y2="161" stroke="#e4e4e4"/>
+<text x="132.4" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">5</text>
+<line x1="153.6" y1="55" x2="153.6" y2="161" stroke="#e4e4e4"/>
+<text x="153.6" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">6</text>
+<line x1="174.7" y1="55" x2="174.7" y2="161" stroke="#e4e4e4"/>
+<text x="174.7" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">7</text>
+<line x1="195.8" y1="55" x2="195.8" y2="161" stroke="#e4e4e4"/>
+<text x="195.8" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">8</text>
+<line x1="216.9" y1="55" x2="216.9" y2="161" stroke="#e4e4e4"/>
+<text x="216.9" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">9</text>
+<line x1="238.0" y1="55" x2="238.0" y2="161" stroke="#e4e4e4"/>
+<text x="238.0" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">10</text>
+<line x1="48" y1="161.0" x2="238" y2="161.0" stroke="#e4e4e4"/>
+<text x="43.0" y="165.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">0</text>
+<line x1="48" y1="139.8" x2="238" y2="139.8" stroke="#e4e4e4"/>
+<text x="43.0" y="143.8" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">5</text>
+<line x1="48" y1="118.6" x2="238" y2="118.6" stroke="#e4e4e4"/>
+<text x="43.0" y="122.6" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">10</text>
+<line x1="48" y1="97.4" x2="238" y2="97.4" stroke="#e4e4e4"/>
+<text x="43.0" y="101.4" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">15</text>
+<line x1="48" y1="76.2" x2="238" y2="76.2" stroke="#e4e4e4"/>
+<text x="43.0" y="80.2" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">20</text>
+<line x1="48" y1="55.0" x2="238" y2="55.0" stroke="#e4e4e4"/>
+<text x="43.0" y="59.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">25</text>
+<path d="M48,55 V161 H238" stroke="#444444" fill="none"/>
+<text x="143.0" y="44.0" font-size="12" text-anchor="middle" font-weight="bold" fill="#222222">KION: % of impressions by usual share</text>
+<path d="M48.0,117.8 L69.1,131.9 L90.2,119.9 L111.3,131.9 L132.4,93.0 L153.6,117.3 L174.7,113.6 L195.8,89.6 L216.9,134.6 L238.0,136.4" stroke="#0072B2" stroke-width="1.6" fill="none" opacity="0.85"/>
+<circle cx="48.0" cy="117.8" r="4.2" fill="#0072B2"/>
+<circle cx="69.1" cy="131.9" r="4.2" fill="#0072B2"/>
+<circle cx="90.2" cy="119.9" r="4.2" fill="#0072B2"/>
+<circle cx="111.3" cy="131.9" r="4.2" fill="#0072B2"/>
+<circle cx="132.4" cy="93.0" r="4.2" fill="#0072B2"/>
+<circle cx="153.6" cy="117.3" r="4.2" fill="#0072B2"/>
+<circle cx="174.7" cy="113.6" r="4.2" fill="#0072B2"/>
+<circle cx="195.8" cy="89.6" r="4.2" fill="#0072B2"/>
+<circle cx="216.9" cy="134.6" r="4.2" fill="#0072B2"/>
+<circle cx="238.0" cy="136.4" r="4.2" fill="#0072B2"/>
+<path d="M48.0,149.6 L69.1,153.0 L90.2,146.1 L111.3,140.9 L132.4,99.5 L153.6,106.5 L174.7,102.8 L195.8,61.7 L216.9,110.8 L238.0,115.1" stroke="#E69F00" stroke-width="1.6" fill="none" opacity="0.85"/>
+<polygon points="48.0,144.6 52.8,153.3 43.2,153.3" fill="#E69F00"/>
+<polygon points="69.1,148.0 73.9,156.7 64.3,156.7" fill="#E69F00"/>
+<polygon points="90.2,141.0 95.1,149.7 85.4,149.7" fill="#E69F00"/>
+<polygon points="111.3,135.9 116.2,144.6 106.5,144.6" fill="#E69F00"/>
+<polygon points="132.4,94.5 137.3,103.2 127.6,103.2" fill="#E69F00"/>
+<polygon points="153.6,101.5 158.4,110.2 148.7,110.2" fill="#E69F00"/>
+<polygon points="174.7,97.7 179.5,106.4 169.8,106.4" fill="#E69F00"/>
+<polygon points="195.8,56.7 200.6,65.4 190.9,65.4" fill="#E69F00"/>
+<polygon points="216.9,105.8 221.7,114.5 212.1,114.5" fill="#E69F00"/>
+<polygon points="238.0,110.1 242.8,118.8 233.2,118.8" fill="#E69F00"/>
+<line x1="298.0" y1="55" x2="298.0" y2="161" stroke="#e4e4e4"/>
+<text x="298.0" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">1</text>
+<line x1="319.1" y1="55" x2="319.1" y2="161" stroke="#e4e4e4"/>
+<text x="319.1" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">2</text>
+<line x1="340.2" y1="55" x2="340.2" y2="161" stroke="#e4e4e4"/>
+<text x="340.2" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">3</text>
+<line x1="361.3" y1="55" x2="361.3" y2="161" stroke="#e4e4e4"/>
+<text x="361.3" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">4</text>
+<line x1="382.4" y1="55" x2="382.4" y2="161" stroke="#e4e4e4"/>
+<text x="382.4" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">5</text>
+<line x1="403.6" y1="55" x2="403.6" y2="161" stroke="#e4e4e4"/>
+<text x="403.6" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">6</text>
+<line x1="424.7" y1="55" x2="424.7" y2="161" stroke="#e4e4e4"/>
+<text x="424.7" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">7</text>
+<line x1="445.8" y1="55" x2="445.8" y2="161" stroke="#e4e4e4"/>
+<text x="445.8" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">8</text>
+<line x1="466.9" y1="55" x2="466.9" y2="161" stroke="#e4e4e4"/>
+<text x="466.9" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">9</text>
+<line x1="488.0" y1="55" x2="488.0" y2="161" stroke="#e4e4e4"/>
+<text x="488.0" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">10</text>
+<line x1="298" y1="161.0" x2="488" y2="161.0" stroke="#e4e4e4"/>
+<text x="293.0" y="165.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">0</text>
+<line x1="298" y1="143.3" x2="488" y2="143.3" stroke="#e4e4e4"/>
+<text x="293.0" y="147.3" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">5</text>
+<line x1="298" y1="125.7" x2="488" y2="125.7" stroke="#e4e4e4"/>
+<text x="293.0" y="129.7" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">10</text>
+<line x1="298" y1="108.0" x2="488" y2="108.0" stroke="#e4e4e4"/>
+<text x="293.0" y="112.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">15</text>
+<line x1="298" y1="90.3" x2="488" y2="90.3" stroke="#e4e4e4"/>
+<text x="293.0" y="94.3" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">20</text>
+<line x1="298" y1="72.7" x2="488" y2="72.7" stroke="#e4e4e4"/>
+<text x="293.0" y="76.7" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">25</text>
+<line x1="298" y1="55.0" x2="488" y2="55.0" stroke="#e4e4e4"/>
+<text x="293.0" y="59.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">30</text>
+<path d="M298,55 V161 H488" stroke="#444444" fill="none"/>
+<text x="393.0" y="44.0" font-size="12" text-anchor="middle" font-weight="bold" fill="#222222">KION: % of impressions by length</text>
+<path d="M298.0,156.7 L319.1,151.9 L340.2,114.3 L361.3,128.3 L382.4,131.5 L403.6,131.2 L424.7,110.5 L445.8,134.0 L466.9,131.1 L488.0,67.2" stroke="#0072B2" stroke-width="1.6" fill="none" opacity="0.85"/>
+<circle cx="298.0" cy="156.7" r="4.2" fill="#0072B2"/>
+<circle cx="319.1" cy="151.9" r="4.2" fill="#0072B2"/>
+<circle cx="340.2" cy="114.3" r="4.2" fill="#0072B2"/>
+<circle cx="361.3" cy="128.3" r="4.2" fill="#0072B2"/>
+<circle cx="382.4" cy="131.5" r="4.2" fill="#0072B2"/>
+<circle cx="403.6" cy="131.2" r="4.2" fill="#0072B2"/>
+<circle cx="424.7" cy="110.5" r="4.2" fill="#0072B2"/>
+<circle cx="445.8" cy="134.0" r="4.2" fill="#0072B2"/>
+<circle cx="466.9" cy="131.1" r="4.2" fill="#0072B2"/>
+<circle cx="488.0" cy="67.2" r="4.2" fill="#0072B2"/>
+<path d="M298.0,148.9 L319.1,154.3 L340.2,103.1 L361.3,120.8 L382.4,131.4 L403.6,128.8 L424.7,97.4 L445.8,125.8 L466.9,135.4 L488.0,110.9" stroke="#E69F00" stroke-width="1.6" fill="none" opacity="0.85"/>
+<polygon points="298.0,143.8 302.8,152.5 293.2,152.5" fill="#E69F00"/>
+<polygon points="319.1,149.3 323.9,158.0 314.3,158.0" fill="#E69F00"/>
+<polygon points="340.2,98.1 345.1,106.8 335.4,106.8" fill="#E69F00"/>
+<polygon points="361.3,115.8 366.2,124.5 356.5,124.5" fill="#E69F00"/>
+<polygon points="382.4,126.4 387.3,135.1 377.6,135.1" fill="#E69F00"/>
+<polygon points="403.6,123.8 408.4,132.5 398.7,132.5" fill="#E69F00"/>
+<polygon points="424.7,92.4 429.5,101.1 419.8,101.1" fill="#E69F00"/>
+<polygon points="445.8,120.7 450.6,129.4 440.9,129.4" fill="#E69F00"/>
+<polygon points="466.9,130.3 471.7,139.0 462.1,139.0" fill="#E69F00"/>
+<polygon points="488.0,105.8 492.8,114.5 483.2,114.5" fill="#E69F00"/>
+<line x1="48.0" y1="211" x2="48.0" y2="317" stroke="#e4e4e4"/>
+<text x="48.0" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">1</text>
+<line x1="69.1" y1="211" x2="69.1" y2="317" stroke="#e4e4e4"/>
+<text x="69.1" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">2</text>
+<line x1="90.2" y1="211" x2="90.2" y2="317" stroke="#e4e4e4"/>
+<text x="90.2" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">3</text>
+<line x1="111.3" y1="211" x2="111.3" y2="317" stroke="#e4e4e4"/>
+<text x="111.3" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">4</text>
+<line x1="132.4" y1="211" x2="132.4" y2="317" stroke="#e4e4e4"/>
+<text x="132.4" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">5</text>
+<line x1="153.6" y1="211" x2="153.6" y2="317" stroke="#e4e4e4"/>
+<text x="153.6" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">6</text>
+<line x1="174.7" y1="211" x2="174.7" y2="317" stroke="#e4e4e4"/>
+<text x="174.7" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">7</text>
+<line x1="195.8" y1="211" x2="195.8" y2="317" stroke="#e4e4e4"/>
+<text x="195.8" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">8</text>
+<line x1="216.9" y1="211" x2="216.9" y2="317" stroke="#e4e4e4"/>
+<text x="216.9" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">9</text>
+<line x1="238.0" y1="211" x2="238.0" y2="317" stroke="#e4e4e4"/>
+<text x="238.0" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">10</text>
+<line x1="48" y1="317.0" x2="238" y2="317.0" stroke="#e4e4e4"/>
+<text x="43.0" y="321.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">2.5</text>
+<line x1="48" y1="295.8" x2="238" y2="295.8" stroke="#e4e4e4"/>
+<text x="43.0" y="299.8" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">5.0</text>
+<line x1="48" y1="274.6" x2="238" y2="274.6" stroke="#e4e4e4"/>
+<text x="43.0" y="278.6" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">7.5</text>
+<line x1="48" y1="253.4" x2="238" y2="253.4" stroke="#e4e4e4"/>
+<text x="43.0" y="257.4" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">10.0</text>
+<line x1="48" y1="232.2" x2="238" y2="232.2" stroke="#e4e4e4"/>
+<text x="43.0" y="236.2" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">12.5</text>
+<line x1="48" y1="211.0" x2="238" y2="211.0" stroke="#e4e4e4"/>
+<text x="43.0" y="215.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">15.0</text>
+<path d="M48,211 V317 H238" stroke="#444444" fill="none"/>
+<text x="143.0" y="200.0" font-size="12" text-anchor="middle" font-weight="bold" fill="#222222">Yambda: % of impressions by usual share</text>
+<path d="M48.0,283.2 L69.1,257.8 L90.2,248.0 L111.3,233.7 L132.4,231.7 L153.6,218.8 L174.7,249.7 L195.8,262.3 L216.9,272.7 L238.0,276.0" stroke="#0072B2" stroke-width="1.6" fill="none" opacity="0.85"/>
+<circle cx="48.0" cy="283.2" r="4.2" fill="#0072B2"/>
+<circle cx="69.1" cy="257.8" r="4.2" fill="#0072B2"/>
+<circle cx="90.2" cy="248.0" r="4.2" fill="#0072B2"/>
+<circle cx="111.3" cy="233.7" r="4.2" fill="#0072B2"/>
+<circle cx="132.4" cy="231.7" r="4.2" fill="#0072B2"/>
+<circle cx="153.6" cy="218.8" r="4.2" fill="#0072B2"/>
+<circle cx="174.7" cy="249.7" r="4.2" fill="#0072B2"/>
+<circle cx="195.8" cy="262.3" r="4.2" fill="#0072B2"/>
+<circle cx="216.9" cy="272.7" r="4.2" fill="#0072B2"/>
+<circle cx="238.0" cy="276.0" r="4.2" fill="#0072B2"/>
+<path d="M48.0,296.0 L69.1,270.9 L90.2,256.8 L111.3,237.3 L132.4,232.8 L153.6,213.1 L174.7,246.3 L195.8,255.7 L216.9,264.7 L238.0,260.4" stroke="#E69F00" stroke-width="1.6" fill="none" opacity="0.85"/>
+<polygon points="48.0,291.0 52.8,299.7 43.2,299.7" fill="#E69F00"/>
+<polygon points="69.1,265.9 73.9,274.6 64.3,274.6" fill="#E69F00"/>
+<polygon points="90.2,251.8 95.1,260.5 85.4,260.5" fill="#E69F00"/>
+<polygon points="111.3,232.3 116.2,241.0 106.5,241.0" fill="#E69F00"/>
+<polygon points="132.4,227.7 137.3,236.4 127.6,236.4" fill="#E69F00"/>
+<polygon points="153.6,208.1 158.4,216.8 148.7,216.8" fill="#E69F00"/>
+<polygon points="174.7,241.3 179.5,249.9 169.8,249.9" fill="#E69F00"/>
+<polygon points="195.8,250.7 200.6,259.4 190.9,259.4" fill="#E69F00"/>
+<polygon points="216.9,259.6 221.7,268.3 212.1,268.3" fill="#E69F00"/>
+<polygon points="238.0,255.3 242.8,264.0 233.2,264.0" fill="#E69F00"/>
+<line x1="298.0" y1="211" x2="298.0" y2="317" stroke="#e4e4e4"/>
+<text x="298.0" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">1</text>
+<line x1="319.1" y1="211" x2="319.1" y2="317" stroke="#e4e4e4"/>
+<text x="319.1" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">2</text>
+<line x1="340.2" y1="211" x2="340.2" y2="317" stroke="#e4e4e4"/>
+<text x="340.2" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">3</text>
+<line x1="361.3" y1="211" x2="361.3" y2="317" stroke="#e4e4e4"/>
+<text x="361.3" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">4</text>
+<line x1="382.4" y1="211" x2="382.4" y2="317" stroke="#e4e4e4"/>
+<text x="382.4" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">5</text>
+<line x1="403.6" y1="211" x2="403.6" y2="317" stroke="#e4e4e4"/>
+<text x="403.6" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">6</text>
+<line x1="424.7" y1="211" x2="424.7" y2="317" stroke="#e4e4e4"/>
+<text x="424.7" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">7</text>
+<line x1="445.8" y1="211" x2="445.8" y2="317" stroke="#e4e4e4"/>
+<text x="445.8" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">8</text>
+<line x1="466.9" y1="211" x2="466.9" y2="317" stroke="#e4e4e4"/>
+<text x="466.9" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">9</text>
+<line x1="488.0" y1="211" x2="488.0" y2="317" stroke="#e4e4e4"/>
+<text x="488.0" y="331.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">10</text>
+<line x1="298" y1="317.0" x2="488" y2="317.0" stroke="#e4e4e4"/>
+<text x="293.0" y="321.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">5.0</text>
+<line x1="298" y1="295.8" x2="488" y2="295.8" stroke="#e4e4e4"/>
+<text x="293.0" y="299.8" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">7.5</text>
+<line x1="298" y1="274.6" x2="488" y2="274.6" stroke="#e4e4e4"/>
+<text x="293.0" y="278.6" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">10.0</text>
+<line x1="298" y1="253.4" x2="488" y2="253.4" stroke="#e4e4e4"/>
+<text x="293.0" y="257.4" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">12.5</text>
+<line x1="298" y1="232.2" x2="488" y2="232.2" stroke="#e4e4e4"/>
+<text x="293.0" y="236.2" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">15.0</text>
+<line x1="298" y1="211.0" x2="488" y2="211.0" stroke="#e4e4e4"/>
+<text x="293.0" y="215.0" font-size="11" text-anchor="end" font-weight="normal" fill="#222222">17.5</text>
+<path d="M298,211 V317 H488" stroke="#444444" fill="none"/>
+<text x="393.0" y="200.0" font-size="12" text-anchor="middle" font-weight="bold" fill="#222222">Yambda: % of impressions by length</text>
+<path d="M298.0,243.0 L319.1,246.9 L340.2,272.4 L361.3,288.7 L382.4,273.1 L403.6,289.2 L424.7,277.3 L445.8,288.4 L466.9,281.4 L488.0,285.7" stroke="#0072B2" stroke-width="1.6" fill="none" opacity="0.85"/>
+<circle cx="298.0" cy="243.0" r="4.2" fill="#0072B2"/>
+<circle cx="319.1" cy="246.9" r="4.2" fill="#0072B2"/>
+<circle cx="340.2" cy="272.4" r="4.2" fill="#0072B2"/>
+<circle cx="361.3" cy="288.7" r="4.2" fill="#0072B2"/>
+<circle cx="382.4" cy="273.1" r="4.2" fill="#0072B2"/>
+<circle cx="403.6" cy="289.2" r="4.2" fill="#0072B2"/>
+<circle cx="424.7" cy="277.3" r="4.2" fill="#0072B2"/>
+<circle cx="445.8" cy="288.4" r="4.2" fill="#0072B2"/>
+<circle cx="466.9" cy="281.4" r="4.2" fill="#0072B2"/>
+<circle cx="488.0" cy="285.7" r="4.2" fill="#0072B2"/>
+<path d="M298.0,220.9 L319.1,240.5 L340.2,266.1 L361.3,286.9 L382.4,274.2 L403.6,289.2 L424.7,282.7 L445.8,294.6 L466.9,292.8 L488.0,298.1" stroke="#E69F00" stroke-width="1.6" fill="none" opacity="0.85"/>
+<polygon points="298.0,215.9 302.8,224.6 293.2,224.6" fill="#E69F00"/>
+<polygon points="319.1,235.5 323.9,244.2 314.3,244.2" fill="#E69F00"/>
+<polygon points="340.2,261.1 345.1,269.8 335.4,269.8" fill="#E69F00"/>
+<polygon points="361.3,281.8 366.2,290.5 356.5,290.5" fill="#E69F00"/>
+<polygon points="382.4,269.2 387.3,277.9 377.6,277.9" fill="#E69F00"/>
+<polygon points="403.6,284.2 408.4,292.9 398.7,292.9" fill="#E69F00"/>
+<polygon points="424.7,277.6 429.5,286.3 419.8,286.3" fill="#E69F00"/>
+<polygon points="445.8,289.6 450.6,298.3 440.9,298.3" fill="#E69F00"/>
+<polygon points="466.9,287.8 471.7,296.5 462.1,296.5" fill="#E69F00"/>
+<polygon points="488.0,293.0 492.8,301.7 483.2,301.7" fill="#E69F00"/>
+<text x="258.0" y="351.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">tenth of the catalogue, from the lowest usual share or the shortest item to the highest or longest</text>
+</svg>

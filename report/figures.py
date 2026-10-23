@@ -3,18 +3,19 @@
     python3 report/figures.py
 
 Writes report/figures/<name>.svg for every figure of FIGURES. A point of a figure is one run of one report;
-runs a session does not have are left out, so a figure fills up as sessions are added. Needs nothing beyond
-the standard library.
+runs a session does not have are left out, so a figure fills up as sessions are added. A few figures read a table
+derived from a report instead (DERIVED_REPORTS). Needs nothing beyond the standard library.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-from tables import DATASET_NAMES, FRONTIER_SESSIONS, REVIEW_SESSIONS, SESSIONS, Source, number
+from tables import DATASET_NAMES, FRONTIER_SESSIONS, REVIEW_SESSIONS, SESSIONS, Source, number, report_cells
 
 OUTPUT = Path(__file__).resolve().parent / "figures"
 FONT = "New Computer Modern"
@@ -22,10 +23,12 @@ PANEL_WIDTH, PANEL_HEIGHT = 250, 172
 MARGIN_LEFT, MARGIN_RIGHT, MARGIN_TOP, MARGIN_BOTTOM = 48, 12, 26, 40
 LEGEND_ROW_HEIGHT, LEGEND_COLUMN_WIDTH = 19, 240
 HORIZONTAL_LABEL_HEIGHT = 16  # the label of the horizontal axis is written once, under the last row of panels
+RIGHT_PADDING = 16  # room for the last tick label of the rightmost panel
 AXIS, GRID = "#444444", "#e4e4e4"
 # The colour-blind-safe palette of Okabe and Ito.
 BLUE, ORANGE, GREEN, VERMILION, PURPLE, SKY, BLACK = "#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#222222"
 SMALLEST_DISTANCE = 0.008  # nats per item; runs that moved less are drawn at this edge of the logarithmic axis
+MOST_INTEGER_TICKS = 12  # a horizontal axis of run names gets a tick per integer up to this span, round ticks beyond it
 
 KL = "training/kl_to_reference"
 NDCG = "all/ndcg@10"
@@ -53,6 +56,7 @@ class Axis:
     quantity: str | None  # None: the run's name is the value, for reports whose rows are positions or steps
     label: str
     logarithmic: bool = False
+    from_zero: bool = False  # a vertical axis that starts at zero whatever its points, for a quantity that starts there
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,10 @@ BASE_RECOMMENDER = Series("base recommender, generated lists", (("kl_sweep", "pr
 POSITIONS = tuple(("position_hits", str(position)) for position in range(1, 11))
 MULTI_TOKEN_POSITIONS = tuple(("multi_token_position_hits", str(position)) for position in range(1, 11))
 STEPS = tuple(("feedback_assumptions_on_real_sequences", str(step)) for step in range(1, 6))
+# The main run is evaluated on validation requests before its first iteration and every 250 iterations after it, and
+# records the KL of its sampled lists from its first policy update on.
+MAIN_RUN_ITERATIONS = tuple(("rl_training", str(iteration)) for iteration in range(0, 2001, 250))
+TENTHS = tuple(("impressions_by_tenth", str(tenth)) for tenth in range(1, 11))
 
 FIGURES = (
     Figure(
@@ -187,7 +195,66 @@ FIGURES = (
         sessions=tuple(REVIEW_SESSIONS.values()),
         legend_columns=2,
     ),
+    Figure(
+        "main_run_training",
+        horizontal=Axis(None, "RL iteration of the main run"),
+        vertical=(Axis("played_ratio", "predicted share"), Axis("all/ndcg@10", "NDCG@10"), Axis("kl_to_reference", "KL from the base, nats", from_zero=True)),
+        series=(
+            Series("training reward model, generated lists", MAIN_RUN_ITERATIONS, BLUE, prefix="validation/predicted/train/"),
+            Series("held-out reward model, generated lists", MAIN_RUN_ITERATIONS, ORANGE, marker="square", prefix="validation/predicted/heldout/"),
+            Series("generated lists", MAIN_RUN_ITERATIONS, GREEN, marker="triangle", prefix="validation/next_k/"),
+            Series("ranked lists", MAIN_RUN_ITERATIONS, BLACK, marker="square", prefix="validation/top_k/"),
+            Series("lists sampled in training", MAIN_RUN_ITERATIONS, VERMILION, marker="diamond"),
+        ),
+    ),
+    Figure(
+        "impressions_by_tenth",
+        horizontal=Axis(None, "tenth of the catalogue, from the lowest usual share or the shortest item to the highest or longest"),
+        vertical=(Axis("usual_share", "% of impressions by usual share"), Axis("length", "% of impressions by length")),
+        series=(
+            Series("base recommender, generated lists", TENTHS, BLUE, prefix="before/"),
+            Series("RL main run, generated lists", TENTHS, ORANGE, marker="triangle", prefix="after/"),
+        ),
+        legend_columns=2,
+    ),
 )
+
+
+@lru_cache(maxsize=None)
+def impressions_by_tenth(session: str) -> dict[str, dict[str, float]] | None:
+    """The share of the test users' lists, in percent, that went to each tenth of the catalogue before and after the main run.
+
+    The catalogue is cut twice into tenths with as many items each: by each item's mean consumed share in the training
+    period ("usual_share") and by its length ("length"), lowest first. Rows are the tenths "1" to "10"; columns are
+    "<before|after>/<usual_share|length>". None if the session has no exposure report.
+    """
+    report = report_cells(session, "rl_exposure_change")
+    if report is None:
+        return None
+    columns, rows = report
+    items = [{column: float(value) for column, value in zip(columns, values)} for values in rows.values()]
+    totals = {moment: sum(item[f"exposure_{moment}"] for item in items) for moment in ("before", "after")}
+    shares: dict[str, dict[str, float]] = {str(tenth): {} for tenth in range(1, 11)}
+    for ordering, attribute in (("usual_share", "mean_played_ratio"), ("length", "duration_seconds")):
+        ordered = sorted(items, key=lambda item: item[attribute])
+        for rank, item in enumerate(ordered):
+            tenth = shares[str(rank * 10 // len(ordered) + 1)]
+            for moment in ("before", "after"):
+                key = f"{moment}/{ordering}"
+                tenth[key] = tenth.get(key, 0.0) + 100 * item[f"exposure_{moment}"] / totals[moment]
+    return shares
+
+
+# Tables computed from a report rather than read from one, by the name a series gives as its report.
+DERIVED_REPORTS = {"impressions_by_tenth": impressions_by_tenth}
+
+
+def value(session: str, report: str, run: str, quantity: str) -> float | None:
+    """The number a series draws for one run: read from the session's report, or from a table derived from one."""
+    if report in DERIVED_REPORTS:
+        table = DERIVED_REPORTS[report](session)
+        return None if table is None else table.get(run, {}).get(quantity)
+    return number(Source(session, report, run, quantity))
 
 
 def dataset_name(session: str) -> str:
@@ -197,7 +264,7 @@ def dataset_name(session: str) -> str:
 def points_of(series: Series, session: str, horizontal: Axis, vertical: Axis) -> list[tuple[float, float]]:
     points = []
     for report, run in series.runs:
-        x, y = (float(run) if axis.quantity is None else number(Source(session, report, run, series.prefix + axis.quantity)) for axis in (horizontal, vertical))
+        x, y = (float(run) if axis.quantity is None else value(session, report, run, series.prefix + axis.quantity) for axis in (horizontal, vertical))
         if x is not None and y is not None:
             points.append((max(x, SMALLEST_DISTANCE) if horizontal.logarithmic else x, y))
     return sorted(points) if series.ordered else points
@@ -259,11 +326,11 @@ def panel(figure: Figure, session: str, vertical: Axis, left: float, top: float)
         def across(x: float) -> float:
             return plot_left + (math.log10(x) - x_low) / (x_high - x_low) * plot_width
     else:
-        if figure.horizontal.quantity is None:
-            positions = [float(run) for series in figure.series for _, run in series.runs]
+        positions = [float(run) for series in figure.series for _, run in series.runs] if figure.horizontal.quantity is None else []
+        if positions and max(positions) - min(positions) <= MOST_INTEGER_TICKS:
             ticks = [float(position) for position in range(int(min(positions)), int(max(positions)) + 1)]
         else:
-            ticks = linear_ticks(min(xs), max(xs))
+            ticks = linear_ticks(min(positions or xs), max(positions or xs))
         step = ticks[1] - ticks[0]
         x_ticks = [(tick, tick_text(tick, step)) for tick in ticks]
         x_low, x_high = ticks[0], ticks[-1]
@@ -271,7 +338,7 @@ def panel(figure: Figure, session: str, vertical: Axis, left: float, top: float)
         def across(x: float) -> float:
             return plot_left + (x - x_low) / (x_high - x_low) * plot_width
 
-    y_ticks = linear_ticks(min(ys), max(ys))
+    y_ticks = linear_ticks(min(ys + [0.0] if vertical.from_zero else ys), max(ys))
     y_step = y_ticks[1] - y_ticks[0]
 
     def up(y: float) -> float:
@@ -309,7 +376,7 @@ def legend(figure: Figure, width: float) -> tuple[list[str], float]:
 
 
 def svg(figure: Figure) -> str:
-    width = PANEL_WIDTH * len(figure.vertical)
+    width = PANEL_WIDTH * len(figure.vertical) + RIGHT_PADDING
     parts, legend_height = legend(figure, width)
     top = legend_height
     for session in figure.sessions:

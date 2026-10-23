@@ -1,26 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="750" height="395" viewBox="0 0 750 395" font-family="New Computer Modern">
-<line x1="28.0" y1="13" x2="50.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
-<circle cx="39.0" cy="13.0" r="4.2" fill="#0072B2"/>
-<text x="57.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL on the share, anchor sweep</text>
-<line x1="28.0" y1="32" x2="50.0" y2="32" stroke="#E69F00" stroke-width="1.6"/>
-<polygon points="35.1,28.1 42.9,28.1 42.9,35.9 35.1,35.9" fill="#E69F00"/>
-<text x="57.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">re-ranking by the reward model</text>
-<line x1="28.0" y1="51" x2="50.0" y2="51" stroke="#009E73" stroke-width="1.6"/>
-<polygon points="39.0,46.0 43.8,54.7 34.2,54.7" fill="#009E73"/>
-<text x="57.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL on share + 10 × logged relevance</text>
-<path d="M275.0,9.0 L283.0,17.0 M275.0,17.0 L283.0,9.0" stroke="#009E73" stroke-width="2.4" fill="none"/>
-<text x="297.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL on logged relevance alone</text>
-<line x1="268.0" y1="32" x2="290.0" y2="32" stroke="#CC79A7" stroke-width="1.6"/>
-<polygon points="279.0,26.8 284.2,32.0 279.0,37.2 273.8,32.0" fill="#CC79A7"/>
-<text x="297.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">off-policy REINFORCE</text>
-<polygon points="279.0,45.8 284.2,51.0 279.0,56.2 273.8,51.0" fill="#D55E00"/>
-<text x="297.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">liked-only fine-tuning</text>
-<circle cx="519.0" cy="13.0" r="4.2" fill="#56B4E9"/>
-<text x="537.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">best of 8 sampled lists</text>
-<polygon points="519.0,25.8 520.6,29.7 524.9,30.1 521.6,32.9 522.6,37.0 519.0,34.8 515.4,37.0 516.4,32.9 513.1,30.1 517.4,29.7" fill="#222222"/>
-<text x="537.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, generated lists</text>
-<polygon points="515.1,47.1 522.9,47.1 522.9,54.9 515.1,54.9" fill="#222222"/>
-<text x="537.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, ranked lists</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="766" height="395" viewBox="0 0 766 395" font-family="New Computer Modern">
+<line x1="36.0" y1="13" x2="58.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
+<circle cx="47.0" cy="13.0" r="4.2" fill="#0072B2"/>
+<text x="65.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL on the share, anchor sweep</text>
+<line x1="36.0" y1="32" x2="58.0" y2="32" stroke="#E69F00" stroke-width="1.6"/>
+<polygon points="43.1,28.1 50.9,28.1 50.9,35.9 43.1,35.9" fill="#E69F00"/>
+<text x="65.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">re-ranking by the reward model</text>
+<line x1="36.0" y1="51" x2="58.0" y2="51" stroke="#009E73" stroke-width="1.6"/>
+<polygon points="47.0,46.0 51.8,54.7 42.2,54.7" fill="#009E73"/>
+<text x="65.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL on share + 10 × logged relevance</text>
+<path d="M283.0,9.0 L291.0,17.0 M283.0,17.0 L291.0,9.0" stroke="#009E73" stroke-width="2.4" fill="none"/>
+<text x="305.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL on logged relevance alone</text>
+<line x1="276.0" y1="32" x2="298.0" y2="32" stroke="#CC79A7" stroke-width="1.6"/>
+<polygon points="287.0,26.8 292.2,32.0 287.0,37.2 281.8,32.0" fill="#CC79A7"/>
+<text x="305.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">off-policy REINFORCE</text>
+<polygon points="287.0,45.8 292.2,51.0 287.0,56.2 281.8,51.0" fill="#D55E00"/>
+<text x="305.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">liked-only fine-tuning</text>
+<circle cx="527.0" cy="13.0" r="4.2" fill="#56B4E9"/>
+<text x="545.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">best of 8 sampled lists</text>
+<polygon points="527.0,25.8 528.6,29.7 532.9,30.1 529.6,32.9 530.6,37.0 527.0,34.8 523.4,37.0 524.4,32.9 521.1,30.1 525.4,29.7" fill="#222222"/>
+<text x="545.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, generated lists</text>
+<polygon points="523.1,47.1 530.9,47.1 530.9,54.9 523.1,54.9" fill="#222222"/>
+<text x="545.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, ranked lists</text>
 <line x1="48.0" y1="93" x2="48.0" y2="199" stroke="#e4e4e4"/>
 <text x="48.0" y="213.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">0.45</text>
 <line x1="86.0" y1="93" x2="86.0" y2="199" stroke="#e4e4e4"/>
@@ -322,5 +322,5 @@
 <circle cx="635.7" cy="271.2" r="4.2" fill="#56B4E9"/>
 <polygon points="577.8,255.8 579.4,259.7 583.6,260.1 580.4,262.8 581.4,267.0 577.8,264.8 574.1,267.0 575.1,262.8 571.9,260.1 576.1,259.7" fill="#222222"/>
 <polygon points="609.4,280.8 617.1,280.8 617.1,288.6 609.4,288.6" fill="#222222"/>
-<text x="375.0" y="389.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">predicted share, held-out model</text>
+<text x="383.0" y="389.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">predicted share, held-out model</text>
 </svg>

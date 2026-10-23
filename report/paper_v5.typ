@@ -1,4 +1,4 @@
-// Paper draft, version 5.
+// The paper, version 5.
 // Build: python3 report/tables.py && python3 report/figures.py && typst compile report/paper_v5.typ
 // Tables come from results/<session>/*.csv through report/tables.py, the SVG figures through report/figures.py; the
 // numbers quoted in the prose are read from the same reports. Bibliography: report/references.bib.
@@ -73,25 +73,24 @@
   #v(0.5em)
   #text(size: 11pt)[Daniil Antonov] \
   ITMO University, Saint Petersburg, Russia \
-  #text(size: 9pt)[Draft, version 5 #h(0.6em) 22 October 2026]
+  #text(size: 9pt)[October 2026]
 ]
 
 #pad(x: 1cm)[
   #set text(size: 9.5pt)
   *Abstract.* A recommender that generates a list item by item can be fine-tuned with reinforcement learning (RL)
-  towards feedback that next-item training does not see. We study the least protected form of this idea: a GPT-2
-  recommender is fine-tuned with a policy gradient to raise the consumed share of its items as a second GPT-2, the
-  reward model, predicts it, held near the pretrained recommender only by a KL anchor. On a video log (KION) and a
-  music log (Yambda-50M), instruments that the optimised model cannot influence judge the result, and the central
-  comparisons have three seeds. Relevance is traded for predicted reward along a frontier: KION loses 1.8% of
-  NDCG\@10 for an 8% higher predicted share at the weight selected on validation requests, 11.5% for 24% further
-  along. What RL learns there is one re-weighting of the catalogue: held to one score offset per item it reaches
-  89--93% of its gain, and that part carries the whole loss of relevance. The reward sets it, since 79% of the
-  reward's own optimum is per item; on Yambda, where the reward is mostly personal, the optimiser amplifies the
-  per-item part. RL settings only move along the frontier, and the closed-form optimum computed at inference reaches
-  it without training. Two changes move it: reward-weighted fine-tuning on the logged share relative to the item's
-  usual, with no reward model, raises NDCG\@10 by 1.9%, a length-neutral logged response by 28% and personalisation
-  by 19%; and predicting each position of a list from the real history is 6% more relevant than generating it.
+  towards feedback that next-item training does not see. We study its least protected form: PPO raises the consumed
+  share of a GPT-2 recommender's items as a second GPT-2, the reward model, predicts it, and only a KL penalty towards
+  the pretrained recommender, the _anchor_, asks for relevance. Instruments that the optimised model cannot influence
+  judge the result on a video log (KION) and a music log (Yambda-50M), over three seeds. RL raises the predicted
+  share, by 24% on KION, at a cost in relevance that the anchor sets: NDCG\@10 falls by 1.8% at the weight chosen on
+  validation requests and by 11.5% at a weaker one. What RL learns is one re-weighting of the catalogue towards
+  titles that everybody finishes, which is what the reward's optimum is. RL settings only move the policy along the
+  resulting frontier, which the closed-form optimum reaches at inference without training. The log moves the
+  frontier: reward-weighted fine-tuning on the share relative to the item's usual raises a length-neutral logged
+  response by 21% and personalisation by 19% over the same epoch of plain training, without a reward model, and
+  predicting each position from the real
+  history is 6% more relevant than generating the list.
 ]
 
 = Introduction
@@ -115,44 +114,70 @@ the trade-off, we test why it arises and what moves it, with methods from the po
 restricted to one score offset per item or to rank-1 updates, the policy's change split into its per-item part and
 the rest, the closed-form optimum computed at inference with and without a learned look-ahead, learning from logged
 responses alone, and lists predicted position by position from the real history. The study answers five questions
-about RL fine-tuning of a next-item recommender; @tab-answers answers each in one sentence, and @sec-q1 to @sec-q5
-give the evidence.
+about RL fine-tuning of a next-item recommender. @tab-answers answers each briefly, @sec-q1 to @sec-q5 give the
+evidence, and @tab-glossary defines the terms that recur.
 
 #figure(
   results-table(
     columns: (3.3cm, 1fr),
     align: (left, left),
-    header: ([Question], [Answer in one sentence]),
+    header: ([Question], [Answer]),
     [*Q1.* How does the model's behaviour change after RL fine-tuning?],
-    [The predicted reward is maximised ($+24%$ on KION, confirmed by a held-out reward model), but RL learns one
-      re-weighting of the catalogue, from long series to short films: held to one score offset per item it reaches
-      89--93% of its gain, and users take to the recommended titles less than usual. The reward sets this (79% of its
-      optimum is per item); on Yambda, where the reward is mostly personal, the optimiser amplifies the per-item part.],
+    [The predicted reward rises ($+24%$ on KION, and a reward model trained on other users agrees), but what RL learns
+      is one re-weighting of the catalogue towards titles that everybody finishes, which is the reward's own optimum.],
     [*Q2.* Is relevance preserved? Does the model recommend the same items to everyone?],
-    [Relevance is traded along a frontier: at the weight selected on validation requests KION's NDCG\@10 falls by
-      1.8% for an 8% higher predicted share, at the main run by $11.5% plus.minus 1.3$ for 24%, at every cut-off and
-      most for users with short histories. The per-item part of the policy carries this loss and makes lists alike;
-      without the anchor every user receives the same list. Yambda keeps both.],
+    [Relevance is traded along a frontier: NDCG\@10 falls by 1.8% at the weight chosen on validation requests and by
+      11.5% at the main run, most for users with short histories, and without the anchor every user receives the same
+      list. Yambda keeps both.],
     [*Q3.* Can we get closer to long-term goals?],
-    [Return, likes and adoption can be predicted and rewarded, but at a moderate distance their predictions rise by a
-      few percent; the largest gain, the return after the list on KION ($+18%$), lies beyond any return rate in the
-      log. Steering the base recommender at inference by predicted adoption with a learned look-ahead raises adoption
-      by 10% and NDCG\@10 by 4% on Yambda. Only an online test can show whether users return or adopt more.],
+    [Return, likes and adoption can be predicted and rewarded, but their predictions rise by a few percent, and the
+      largest gain lies beyond anything in the log; only an online test can show whether users return.],
     [*Q4.* What happens when generating several steps ahead?],
-    [A generated list gains after a hit and loses after a miss, and the predicted reward of later steps depends on an
-      assumption about responses nobody observed. Predicting each position from the real history removes the loss
-      after a miss: $6.3% plus.minus 0.4$ more NDCG\@10 than generation on KION, level with it on Yambda. Credit along
-      the list and look-ahead help only rewards that depend on what follows an item.],
+    [A generated list gains after a hit and loses after a miss, and simulated responses bias the reward of later
+      steps; predicting each position from the real history removes the loss ($+6.3%$ NDCG\@10).],
     [*Q5.* What is the trade-off between relevance and reward?],
-    [RL settings choose a point on the frontier, which re-ranking, guided decoding and weight interpolation reach
-      without RL training. The frontier moves when the reward contains the log: logged relevance in the reward, and
-      reward-weighted fine-tuning on the logged relative share, which raises NDCG\@10 by $1.9% plus.minus 0.5$, the
-      logged surplus by $28% plus.minus 3$ and personalisation by $19% plus.minus 1$ on KION, with no reward model.],
+    [RL settings choose a point on the frontier, which inference reaches without training. The frontier moves when the
+      reward comes from the log, as in reward-weighted fine-tuning on the logged relative share ($+21%$ length-neutral
+      logged response, $+19%$ personalisation over the same epoch of plain training).],
   ),
-  caption: [The five questions and their answers. Numbers are from KION unless Yambda is named; "$plus.minus$" is the
-    standard deviation over three seeds.],
-  placement: none,
+  caption: [The five questions and their answers, on KION unless Yambda is named.],
+  placement: auto,
 ) <tab-answers>
+
+#figure(
+  results-table(
+    columns: (3.4cm, 1fr),
+    align: (left, left),
+    header: ([Term], [Meaning]),
+    [Base recommender $pi_0$], [The pretrained GPT-2 next-item model. Every method starts from it.],
+    [Generated, ranked list], [Ten items chosen one at a time, each appended to the history as if consumed; or the ten
+      items $pi_0$ scores highest for the real history.],
+    [Consumed share $rho$], [The share of a title watched or a track played (`played_ratio` in the code).],
+    [Relative share $q$], [$rho$ as a quantile among the item's training-period responses. 0.5 is usual for the item,
+      so no item earns it by being easy to finish.],
+    [Reward model], [A second GPT-2 that predicts the response to an item before it is consumed. The _training_ copy
+      gives the rewards; the _held-out_ copy, trained on other users, only judges.],
+    [Anchor $beta$, KL distance], [The KL penalty towards $pi_0$ and its weight; and how far a policy ended from
+      $pi_0$, in nats per generated item, which compares runs where $beta$ does not.],
+    [Frontier], [The highest predicted share reached at each level of relevance. Moving along it trades one for the
+      other; a method that moves it gains both.],
+    [Logged share, logged surplus], [Per recommended item, the response the log recorded if the user went on to
+      consume the item, else zero. The surplus counts $q - 1 \/ 2$ instead: positive only if users took to the items
+      more than usual. Neither needs a model.],
+    [Personal part], [The predicted share of a list for its own user minus that of the same list for another user.],
+    [Per-item share], [The share of a change within one history that one effect per item explains: 1 if every user's
+      items move alike.],
+    [Item offsets], [RL restricted to one score offset per item, the same for every user.],
+    [Re-ranking, guided decoding], [The closed-form optimum $pi_0 exp(r \/ beta)$ computed at inference, over the
+      candidates of $pi_0$ at once or one position at a time.],
+    [Reward-weighted fine-tuning], [Next-item training on logged items, each weighted by $exp(r \/ tau)$ of its logged
+      response. It needs no reward model.],
+    [One head per position], [A linear head per list position that predicts the item $k$ events ahead from the real
+      history.],
+  ),
+  caption: [Terms used throughout.],
+  placement: auto,
+) <tab-glossary>
 
 = Related Work
 
@@ -306,36 +331,64 @@ model on the user's real next five items, with the earlier responses as logged o
 
 = Experimental Setup <sec-setup>
 
-*Data.* KION @petrov2022kion is a log of an online cinema with one row per user and title, dated by its last view;
-we keep users with at least 5 and titles with at least 10 training events (256k users, 8k titles, 3.5M training
-events, a median of 10 per user), and its English item table gives each title's name and type. Yambda-50M
-@ploshkin2025yambda is a listening log of Yandex Music; we keep users with at least 50 training events and the 50k
-most played tracks (8.7k users, 35M training events, a median of 2,638 per user), with likes (0.77% of events) and
-dislikes (0.16%); 24% of first plays are adopted. A session continues if the next event follows within 30 minutes on
-Yambda and on the same calendar day on KION; the user returns if a new session starts within a day on Yambda and
-within a week on KION. The last 7 days of each log are the test period and the 7 days before them the validation
-period; the catalogue and every item statistic come from the training period, so no model sees an event after its
-request. The consumed share is bimodal, and on KION it depends on length: films are watched to 0.5 on average and
-the longest tenth of the catalogue, series, to 0.22, since the share is taken of the whole series.
+#figure(
+  results-table(
+    columns: (2.5cm, 1fr, 1fr),
+    align: (left, left, left),
+    header: ([], [KION (main dataset)], [Yambda-50M (replication)]),
+    [Log], [Online cinema @petrov2022kion: one row per user and title, dated by its last view, with the share watched;
+      an item table names every title and its type], [Music service @ploshkin2025yambda: one row per listen, timed to the
+      second, with the share played; likes and dislikes],
+    [Kept], [Users with at least 5 and titles with at least 10 training events], [Users with at least 50 training
+      events; the 50k most played tracks],
+    [Size], [256k users, 8k titles, 3.5M training events; a median of 10 per user], [8.7k users, 50k tracks, 35M
+      training events; a median of 2,638 per user],
+    [Split], [The last 7 days are the test period, the 7 days before them the validation period], [The same],
+    [Test requests], [59,997, one per user at the start of the test week; the history is the last 38 events, the
+      targets the next 20], [7,593; the last 118 events and the next 20],
+    [Session, return], [The next event on the same calendar day; a new day within a week], [The next event within 30
+      minutes; a new session within a day],
+    [Models], [GPT-2, 4 layers of width 256, windows of 48 events], [The same, windows of 128 events],
+    [Fine-tuning], [512 lists of 10 per iteration, $gamma = 0.99$, learning rate $10^(-5)$; the main run has
+      $beta = 0.3$ and 2,000 iterations, every other run 1,000], [The same],
+    [History items], [Never recommended again: one row per user and title], [Allowed: repeats are normal],
+    [Chosen on validation], [$beta = 1$], [$beta = 0.05$],
+  ),
+  caption: [Data, split, models and fine-tuning.],
+  placement: auto,
+) <tab-setup>
 
-*Training and evaluation.* All transformers have 4 layers of width 256 and windows of 48 (KION) or 128 (Yambda)
-events. Fine-tuning samples 512 lists per iteration ($gamma = 0.99$, learning rate $10^(-5)$) for histories cut at a
-random moment of the training period of a random user with at least 8 training events; the _main run_ has
-$beta = 0.3$ and 2,000 iterations, every other run 1,000. Items of the history are blocked on KION and allowed on
-Yambda, where repeats are normal. Each test user makes one request at the start of the test week: the last 38 (KION)
-or 118 (Yambda) events are the history, the same window that every baseline reads, and lists of ten are generated
-greedily unless ranked lists are named. The KL distance of a run is the exact divergence over the catalogue on its
+*Data.* @tab-setup lists the data, the split and the models. On Yambda 0.77% of events are liked and 0.16% disliked,
+and 24% of first plays are adopted. The consumed share is bimodal, and on KION it depends on length: films are watched
+to 0.5 on average and the longest tenth of the catalogue, series, to 0.22, since the share is taken of the whole
+series.
+
+*Training and evaluation.* Fine-tuning cuts its histories at a random moment of the training period of a random user
+with at least 8 training events. Lists of ten are generated greedily unless ranked lists are named, and every baseline
+reads the recommender's window of history. The KL distance of a run is the exact divergence over the catalogue on its
 own sampled training lists, averaged over the last 50 iterations. Operating points are selected on validation
-requests only: the highest held-out predicted share within 5% of the base recommender's NDCG\@10 selects $beta = 1$
-on KION and $beta = 0.05$ on Yambda. The main run's $beta = 0.3$ was carried over from earlier iterations of the study
-and shows a clearly visible move along the frontier, not an optimum.
+requests only: the highest held-out predicted share within 5% of the base recommender's NDCG\@10. The main run's
+$beta = 0.3$ was carried over from earlier iterations of the study and shows a clearly visible move along the
+frontier, not an optimum.
+
+*No leakage.* Every trained model, from the recommender and the reward models to the baselines and every kind of
+fine-tuning, reads windows of the training period only, and RL samples its histories, and the logged continuation of
+each, inside the training period. The catalogue and every item statistic, the quantiles of the relative share
+included, come from the training period. Labels that look ahead, such as continuation, return, likes and adoption,
+are computed for training events from events before the validation period, and an outcome whose waiting time is not
+observed is left out. Early stopping and operating points use the validation period. The history of a test request
+includes the validation week, on which no model trained. On KION a title watched across the boundary appears only as
+a test target, and test events on items outside the training catalogue are dropped for every method alike. The
+repository's README lists each check next to the code that implements it.
 
 *Sessions and seeds.* Each dataset ran a _final_ session with the full grid (6.1 hours on KION, 12.3 on Yambda, on
 one 96 GB GPU), a _review_ session with the long-term rewards, the reward models with hidden responses and the
 analyses by position, user and item, and a _frontier_ session with the methods that probe what RL learns (4.8 and
 6.0 hours). Seeds 1 and 2 repeat the core on both datasets (base models, main run, anchor sweep, a KL budget, credit
 and estimator comparisons, alternatives to RL, logged relevance) and the frontier comparisons on KION; Yambda's
-frontier session ran without likes and dislikes, which none of its rewards use. "$plus.minus$" is the standard
+frontier session ran without likes and dislikes, which none of its rewards use. On KION a _control_ session runs
+seeds 0 to 2 itself (20 minutes per seed) for learning from the log, and a _quick_ session repeats the core of the
+study with seed 0 in 55 minutes, reproducing the final session's numbers. "$plus.minus$" is the standard
 deviation over three seeds, each quantity computed within its seed; other numbers are from seed 0. Every session
 retrains every model with the same seed, so a run present in two sessions differs in the third decimal; every table
 names its session. Every conclusion below holds in each seed.
@@ -354,7 +407,9 @@ recommender (@tab-baselines). The reward model predicts whether a held-out event
 
 *Is the reward maximised?* As far as the reward models can tell, yes: on KION the main run raises the consumed share
 predicted by the training reward model by 20.3% and by the held-out one by 21.5% ($23.9% plus.minus 2.1$; @tab-main).
-The log does not show users responding better. Against what is usual for each title, users took to the recommended
+The two rise together from the first evaluation on validation requests, and 85% of the gain and 90% of the loss of
+NDCG\@10 arrive within the first 250 iterations; the policy then moves on, from 0.06 to 0.09 nats per item from
+$pi_0$, for little more reward (@fig-training). The log does not show users responding better. Against what is usual for each title, users took to the recommended
 titles less: the logged surplus falls from 0.0012 to 0.0005, by 0.0007 in every seed, and by 15% at the
 validation-selected $beta = 1$. The logged share per recommended item, which mostly counts hits, rises by
 $1.1% plus.minus 0.4$: users reached fewer recommended titles (hits $-8.3%$) and finished those more often ($+9.8%$),
@@ -364,7 +419,24 @@ because they are titles everybody finishes.
 80% of the main run's (89% at $beta = 0.1$, and all of them without an anchor). The titles that gained most are films
 of 1.4 to 2.2 hours usually watched to 0.54--0.69; four of the five that lost most are series of 9.5 to 22 hours
 whose usual share is 0.08 to 0.29 (@tab-titles). Popularity is not what the policy follows: one of the largest gains
-is a film that 953 users watched in the training period.
+is a film that 953 users watched in the training period. Across the catalogue (@fig-impressions), the four tenths of
+titles with the lowest usual share fall from 34% to 13% of the impressions and the three highest rise from 29% to
+46%; the longest tenth, mostly series, falls from 26% to 14%. Yambda's impressions move the same way, by a few points.
+
+#figure(
+  image("figures/main_run_training.svg", width: 100%),
+  caption: [The main run over its iterations (final sessions): the predicted share of the generated lists for
+    validation requests as each reward model predicts it; NDCG\@10 of the generated and ranked lists for the same
+    requests; and the KL from the base recommender, in nats per generated item, of the lists sampled in training,
+    recorded from the first update of the policy.],
+) <fig-training>
+
+#figure(
+  image("figures/impressions_by_tenth.svg", width: 72%),
+  caption: [Where the impressions went (final sessions): the share of all impressions in the test users' lists that
+    each tenth of the catalogue received from the base recommender and from the main run. The catalogue is cut into
+    tenths with as many items each, by the item's usual consumed share in the training period and by its length.],
+) <fig-impressions>
 
 *One re-weighting of the catalogue.* Held to the same KL budget as full RL, RL that may change only one score offset
 per item reaches $93% plus.minus 3$ of full RL's gain in predicted share at a budget of 0.1 nats and
@@ -616,10 +688,30 @@ its hard-threshold form, does better (NDCG\@10 $+2.2%$).
   recommended items relative to the item's usual; "Personal part": the held-out reward model's prediction for the
   user minus that for another user.]) <tab-logged>
 
+*A control for the extra epoch.* Reward-weighted fine-tuning trains $pi_0$ for one more epoch at a tenth of its
+learning rate, and $pi_0$ had stopped while its learning rate was still high; on KION its ranked lists are also 4%
+more relevant than its generated ones. A control session with seeds 0 to 2 settles both, with the hypotheses written
+before the run (@tab-control). The same epoch with every weight equal to one, _continued training_, lowers the
+next-item loss on the validation period in every seed and raises coverage by 10%, NDCG\@10 of generated lists by 0.7%
+(significant in two seeds of three) and the logged surplus by 5% (one seed of three). Against it, the weights add
+$21% plus.minus 4$ of logged surplus, $19% plus.minus 2$ of personal part and $1.3% plus.minus 0.5$ of NDCG\@10 on
+generated lists, and 17%, 15% and 0.7% on ranked lists, each in every seed, while coverage falls by 3% to 4%. The
+fine-tuned recommender's ranked lists are also $0.9% plus.minus 0.3$ more relevant than those of $pi_0$, with 23% more
+logged surplus, in every seed. The relevance gain is thus a third the extra epoch's and two thirds the weights', the
+coverage gain is the epoch's alone, and the length-neutral response and the personalisation are almost entirely the
+weights'.
+
+#report-table("control", [Learning from the log against the same epoch of training without its weights (KION,
+  control session, seeds 0 to 2): change in percent, mean $plus.minus$ standard deviation over the seeds, each change
+  computed within its seed and against lists of the same kind. "Continued training" weighs every logged item one;
+  "Surplus": the logged surplus; "Personal": the personal part of the predicted share.], size: 7pt)
+<tab-control>
+
 #answer[Q5][RL settings choose a point on the frontier, and re-ranking, guided decoding and weight interpolation
   reach it without RL training. The frontier moves when the reward contains the log: logged relevance in the reward,
-  and above all reward-weighted fine-tuning on the logged relative share, which on KION raises relevance, a
-  length-neutral logged response, personalisation and coverage at once, without a reward model.]
+  and above all reward-weighted fine-tuning on the logged relative share, which on KION raises a length-neutral logged
+  response by 17--21% and personalisation by 15--19% over the same epoch of plain training, with relevance up, on
+  generated and on ranked lists, without a reward model.]
 
 = Discussion <sec-discussion>
 
@@ -662,11 +754,14 @@ own. Yambda's frontier session, the long-term rewards and the analyses by positi
 adoption could not be verified on a test week. The models are small (4 layers of width 256), so a larger reward model
 may know more about users; Yambda's models read 118 events of a median 2,638, its grids are narrower than KION's, and
 the baselines are untuned. Guided decoding calls the reward model for 50 candidates at every position, the heads per
-position sit on a frozen recommender, and reward-weighted fine-tuning and DPO ran at one learning rate. The
-equal-relevance curves interpolate between runs, the per-item share is measured on 100 candidates, and the personal
-part is the reward model's own belief.
+position sit on a frozen recommender, and reward-weighted fine-tuning and DPO ran at one learning rate. The base
+recommender had not converged in its learning rate: one more epoch of plain training lowers its validation loss and
+raises NDCG\@10 of its generated lists by 0.7%, a slack in every change measured against it, small next to RL's
+loss and a third of the relevance gained by learning from the log. The equal-relevance curves interpolate between
+runs, the per-item share is measured on 100 candidates, and the personal part is the reward model's own belief.
 
-*Future work.* The online experiment of @sec-online is the decisive next step. Offline: the per-user counterpart of
+*Future work.* The online experiment of @sec-online is the decisive next step. Offline: a base recommender trained
+until its learning rate has decayed, as the reference for every method; the per-user counterpart of
 the relative share from OneRec-V2 @zhou2025onerecv2 as the logged reward of reward-weighted fine-tuning; heads per
 position trained together with the recommender and combined with reward-weighted fine-tuning; guided decoding with
 the value of the optimum rather than of $pi_0$, as Q$sharp$ iterates it @zhou2025qsharp; a larger reward model, whose
@@ -678,9 +773,9 @@ protections. The reward rose and a model trained on other users confirmed it, bu
 the catalogue, which items everybody finishes, because that is what the reward's optimum is; users took to the
 recommendations less than usual, and relevance was traded along a frontier that RL settings could only move along and
 that inference alone reaches. What moved the frontier came from the log and from the list format: reward-weighted
-fine-tuning on the share relative to the item's usual improved relevance, a length-neutral logged response,
-personalisation and coverage at once, and a list predicted position by position from the real history was more
-relevant than a generated one. For a reward model to be worth optimising with RL, it has to know something about the
+fine-tuning on the share relative to the item's usual improved a length-neutral logged response, personalisation and
+relevance beyond what the same epoch of plain training gives, on generated and on ranked lists, and a list predicted
+position by position from the real history was more relevant than a generated one. For a reward model to be worth optimising with RL, it has to know something about the
 user that cannot be looked up per item, and its per-item share says so before any training. Code, configurations and
 every table are in `github.com/daniilantonovv/RecSysMaxxing`.
 

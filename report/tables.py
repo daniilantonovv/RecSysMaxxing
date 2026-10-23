@@ -1124,7 +1124,12 @@ class Derived:
 
 
 def over_seeds(row: Derived, dataset: str) -> str:
-    values = [found for found in (row.value(lookup) for lookup in frontier_lookups(dataset)) if found is not None]
+    return over_lookups(row, frontier_lookups(dataset))
+
+
+def over_lookups(row: Derived, lookups: list[Lookup]) -> str:
+    """The row's number in every seed that `lookups` reach, as mean ± standard deviation."""
+    values = [found for found in (row.value(lookup) for lookup in lookups) if found is not None]
     if not values:
         return MISSING
     text = formatted(statistics.mean(values), row.decimals, row.scale, signed=row.signed)
@@ -1219,10 +1224,59 @@ def logged_methods_table() -> str:
     return typst_table([header for header, _ in LOGGED_METHOD_QUANTITIES], (), body)
 
 
+# The control for learning from the log: seeds 0, 1 and 2 in one session, each with its own base recommender, so every
+# change is computed within a seed. Continued training is the same epoch of fine-tuning with every logged item weighing one.
+CONTROL_SESSION = "kion_control"
+CONTROL_SEEDS = (0, 1, 2)
+CONTROL_REPORT = "continued_training_control"
+CONTINUED_TRAINING = "continued training"
+CONTROL_LIST_KINDS = ("generated", "ranked")
+CONTROL_QUANTITIES = (
+    ("NDCG@10", NDCG.source.quantity),
+    ("Surplus", SURPLUS.source.quantity),
+    ("Personal", PERSONAL),
+    ("Coverage", COVERAGE.source.quantity),
+)
+CONTROL_METHODS = (
+    ("Continued training", CONTINUED_TRAINING),
+    ("Reward-weighted, τ = 1", "reward-weighted, relative_ratio, temperature=1.0"),
+    ("Reward-weighted, τ = 0.3", "reward-weighted, relative_ratio, temperature=0.3"),
+    ("Within-user DPO, β = 0.5", "within-user DPO, beta=0.5"),
+)
+
+
+def control_number(seed: int, report: str, run_name: str, quantity_name: str) -> float | None:
+    return number(Source(f"{CONTROL_SESSION}/seed_{seed}", report, run_name, quantity_name))
+
+
+def control_table() -> str:
+    """Learning from the log against the base recommender and against continued training, on generated and on ranked
+    lists: changes in percent, each computed within a seed of the control session."""
+    lookups = [partial(control_number, seed) for seed in CONTROL_SEEDS]
+    panels = (
+        ("Against the base recommender's lists of the same kind", "pretrained", CONTROL_METHODS),
+        ("Against continued training, lists of the same kind", CONTINUED_TRAINING, CONTROL_METHODS[1:]),
+    )
+    body: list[list[str] | str] = []
+    for title, reference, methods in panels:
+        body.append(title)
+        for label, method in methods:
+            changes = [
+                Derived(label, relative_change(CONTROL_REPORT, f"{method}, {kind}", quantity_name, f"{reference}, {kind}"))
+                for kind in CONTROL_LIST_KINDS
+                for _, quantity_name in CONTROL_QUANTITIES
+            ]
+            body.append([label, *(over_lookups(change, lookups) for change in changes)])
+    headers = [header for _ in CONTROL_LIST_KINDS for header, _ in CONTROL_QUANTITIES]
+    groups = tuple((f"{kind.capitalize()} lists", len(CONTROL_QUANTITIES)) for kind in CONTROL_LIST_KINDS)
+    return typst_table(headers, groups, body)
+
+
 def write_tables() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     (OUTPUT / "mechanism.typ").write_text(mechanism_table(), encoding="utf-8")
     (OUTPUT / "logged_methods.typ").write_text(logged_methods_table(), encoding="utf-8")
+    (OUTPUT / "control.typ").write_text(control_table(), encoding="utf-8")
     (OUTPUT / "seeds.typ").write_text(seeds_table(), encoding="utf-8")
     (OUTPUT / "equal_relevance.typ").write_text(equal_relevance_table(), encoding="utf-8")
     (OUTPUT / "titles.typ").write_text(titles_table(), encoding="utf-8")

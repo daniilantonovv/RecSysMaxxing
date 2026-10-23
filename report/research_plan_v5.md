@@ -227,3 +227,32 @@ one session, each with its own base recommender and reward models; every compari
 - *H2 refuted:* the positive result is withdrawn: RW-SFT is then continued training.
 - *H4 refuted:* the gain holds over generated lists only. On KION the list format then decides relevance more than
   the fine-tuning does, in line with Q4 (one head per position).
+
+## Control for continued training: outcome (23 October)
+
+Session `8_control_kion_0_1_2`, reports in `results/kion_control` (`seed_0`, `seed_1`, `seed_2`, `over_seeds`); 20 minutes
+per seed on the RTX PRO 6000. Mean ± standard deviation over seeds 0, 1 and 2, each change computed within its seed
+(`report/tables/control.typ`). "Every seed": the 95% per-user interval of the change excludes zero in all three.
+
+| Hypothesis | Result | Verdict |
+|---|---|---|
+| H1. The epoch alone raises relevance | Continued training against the base recommender: NDCG@10 +0.7 ± 0.3% on generated lists (significant in 2 seeds of 3) and +0.2 ± 0.3% on ranked lists (1 of 3); next-item loss on the validation period lower in every seed (6.606 → 6.594, 6.607 → 6.589, 6.602 → 6.592); coverage +10 ± 1% and +9 ± 1%; logged surplus +5 ± 2% (1 of 3); personal part −0.4 ± 1.2% | Partly. The epoch explains a third of RW-SFT's NDCG@10 gain on generated lists (+0.7 of +1.9) and all of its coverage gain, none of its surplus or personal part. The prediction (≥ +0.9%) is missed, the refutation (< +0.5%) not reached |
+| H2. The weights add the length-neutral response | RW-SFT, τ = 0.3, against continued training: logged surplus +21 ± 4% on generated and +17 ± 0.1% on ranked lists, personal part +19 ± 2% and +15 ± 2%, NDCG@10 +1.3 ± 0.5% and +0.7 ± 0.1%, every seed; coverage −4% and −3%; predicted share −1.8% | Confirmed; the weights also add relevance beyond the epoch |
+| H3. Dose and response | Logged surplus over continued training: τ = 1 +7 ± 2% and +6 ± 1%, τ = 0.3 +21% and +17% | Confirmed |
+| H4. Ranked lists | RW-SFT's ranked lists against the base recommender's ranked lists: NDCG@10 +0.9 ± 0.3%, logged surplus +23 ± 5%, personal part +13 ± 1%, every seed | Confirmed |
+| H5. DPO | Against continued training: logged surplus +35 ± 7% and +34 ± 4%, NDCG@10 −4.3 ± 1.6% and −3.8 ± 0.1%, coverage −30% and −18% | Confirmed |
+
+What this changes in the paper:
+
+- Q5's positive result is now stated against continued training: the weights add 21% of logged surplus, 19% of
+  personal part and 1.3% of NDCG@10 on generated lists, and 17%, 15% and 0.7% on ranked lists, in every seed. The
+  coverage gain of RW-SFT (+5% against the base recommender) belongs to the extra epoch.
+- RW-SFT's ranked lists beat the base recommender's ranked lists, so the result does not depend on the list format.
+- The base recommender had not converged in its learning rate: one more epoch of plain training lowers its validation
+  loss in every seed and raises NDCG@10 of its generated lists by 0.7%. Every change measured against π0 carries this
+  slack; it is small next to RL's −11.5% and a third of the logged methods' relevance gains.
+
+The quick session (`0_quick_kion`, `results/kion_quick`, 55 minutes of stages) reproduced the seed-0 numbers of the
+paper: NDCG@10 of generated lists 0.1173 → 0.1046 under the main run (paper 0.1173 → 0.1047), held-out predicted share
++21.5% (21.5%), reward model AUC 0.755 against 0.656 for the item mean, β = 1 chosen on validation requests, and a
+personal share of the gain of 0.5%.

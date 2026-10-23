@@ -1,26 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="500" height="433" viewBox="0 0 500 433" font-family="New Computer Modern">
-<line x1="23.0" y1="13" x2="45.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
-<circle cx="34.0" cy="13.0" r="4.2" fill="#0072B2"/>
-<text x="52.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL, anchor weights and KL budgets</text>
-<line x1="23.0" y1="32" x2="45.0" y2="32" stroke="#E69F00" stroke-width="1.6"/>
-<polygon points="30.1,28.1 37.9,28.1 37.9,35.9 30.1,35.9" fill="#E69F00"/>
-<text x="52.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">re-ranking (closed form)</text>
-<line x1="23.0" y1="51" x2="45.0" y2="51" stroke="#009E73" stroke-width="1.6"/>
-<polygon points="34.0,46.0 38.8,54.7 29.2,54.7" fill="#009E73"/>
-<text x="52.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">guided decoding (closed form)</text>
-<line x1="23.0" y1="70" x2="45.0" y2="70" stroke="#56B4E9" stroke-width="1.6"/>
-<polygon points="34.0,64.8 39.2,70.0 34.0,75.2 28.8,70.0" fill="#56B4E9"/>
-<text x="52.0" y="74.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">weights between and beyond RL</text>
-<polygon points="30.1,85.1 37.9,85.1 37.9,92.9 30.1,92.9" fill="#D55E00"/>
-<text x="52.0" y="93.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL, one offset per item</text>
-<polygon points="274.0,7.8 279.2,13.0 274.0,18.2 268.8,13.0" fill="#CC79A7"/>
-<text x="292.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">reward-weighted, relative share</text>
-<polygon points="274.0,25.8 275.6,29.7 279.9,30.1 276.6,32.9 277.6,37.0 274.0,34.8 270.4,37.0 271.4,32.9 268.1,30.1 272.4,29.7" fill="#009E73"/>
-<text x="292.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">one head per position</text>
-<polygon points="274.0,44.8 275.6,48.7 279.9,49.1 276.6,51.9 277.6,56.0 274.0,53.8 270.4,56.0 271.4,51.9 268.1,49.1 272.4,48.7" fill="#222222"/>
-<text x="292.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, generated</text>
-<polygon points="270.1,66.1 277.9,66.1 277.9,73.9 270.1,73.9" fill="#222222"/>
-<text x="292.0" y="74.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, ranked</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="516" height="433" viewBox="0 0 516 433" font-family="New Computer Modern">
+<line x1="31.0" y1="13" x2="53.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
+<circle cx="42.0" cy="13.0" r="4.2" fill="#0072B2"/>
+<text x="60.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL, anchor weights and KL budgets</text>
+<line x1="31.0" y1="32" x2="53.0" y2="32" stroke="#E69F00" stroke-width="1.6"/>
+<polygon points="38.1,28.1 45.9,28.1 45.9,35.9 38.1,35.9" fill="#E69F00"/>
+<text x="60.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">re-ranking (closed form)</text>
+<line x1="31.0" y1="51" x2="53.0" y2="51" stroke="#009E73" stroke-width="1.6"/>
+<polygon points="42.0,46.0 46.8,54.7 37.2,54.7" fill="#009E73"/>
+<text x="60.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">guided decoding (closed form)</text>
+<line x1="31.0" y1="70" x2="53.0" y2="70" stroke="#56B4E9" stroke-width="1.6"/>
+<polygon points="42.0,64.8 47.2,70.0 42.0,75.2 36.8,70.0" fill="#56B4E9"/>
+<text x="60.0" y="74.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">weights between and beyond RL</text>
+<polygon points="38.1,85.1 45.9,85.1 45.9,92.9 38.1,92.9" fill="#D55E00"/>
+<text x="60.0" y="93.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">RL, one offset per item</text>
+<polygon points="282.0,7.8 287.2,13.0 282.0,18.2 276.8,13.0" fill="#CC79A7"/>
+<text x="300.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">reward-weighted, relative share</text>
+<polygon points="282.0,25.8 283.6,29.7 287.9,30.1 284.6,32.9 285.6,37.0 282.0,34.8 278.4,37.0 279.4,32.9 276.1,30.1 280.4,29.7" fill="#009E73"/>
+<text x="300.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">one head per position</text>
+<polygon points="282.0,44.8 283.6,48.7 287.9,49.1 284.6,51.9 285.6,56.0 282.0,53.8 278.4,56.0 279.4,51.9 276.1,49.1 280.4,48.7" fill="#222222"/>
+<text x="300.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, generated</text>
+<polygon points="278.1,66.1 285.9,66.1 285.9,73.9 278.1,73.9" fill="#222222"/>
+<text x="300.0" y="74.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, ranked</text>
 <line x1="48.0" y1="131" x2="48.0" y2="237" stroke="#e4e4e4"/>
 <text x="48.0" y="251.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">0.40</text>
 <line x1="79.7" y1="131" x2="79.7" y2="237" stroke="#e4e4e4"/>
@@ -241,5 +241,5 @@
 <polygon points="384.6,303.6 386.2,307.6 390.4,307.9 387.2,310.7 388.2,314.8 384.6,312.6 380.9,314.8 381.9,310.7 378.7,307.9 382.9,307.6" fill="#009E73"/>
 <polygon points="318.3,309.8 319.9,313.8 324.1,314.1 320.9,316.9 321.9,321.0 318.3,318.8 314.6,321.0 315.6,316.9 312.4,314.1 316.6,313.8" fill="#222222"/>
 <polygon points="351.0,328.4 358.7,328.4 358.7,336.2 351.0,336.2" fill="#222222"/>
-<text x="250.0" y="427.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">predicted share, held-out model</text>
+<text x="258.0" y="427.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">predicted share, held-out model</text>
 </svg>

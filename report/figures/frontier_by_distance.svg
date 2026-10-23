@@ -1,22 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="750" height="395" viewBox="0 0 750 395" font-family="New Computer Modern">
-<line x1="28.0" y1="13" x2="50.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
-<circle cx="39.0" cy="13.0" r="4.2" fill="#0072B2"/>
-<text x="57.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">value model, fixed anchor weight</text>
-<polygon points="35.1,28.1 42.9,28.1 42.9,35.9 35.1,35.9" fill="#0072B2"/>
-<text x="57.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">value model, KL budget</text>
-<line x1="28.0" y1="51" x2="50.0" y2="51" stroke="#E69F00" stroke-width="1.6"/>
-<circle cx="39.0" cy="51.0" r="4.2" fill="#E69F00"/>
-<text x="57.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">leave-one-out, fixed anchor weight</text>
-<polygon points="275.1,9.1 282.9,9.1 282.9,16.9 275.1,16.9" fill="#E69F00"/>
-<text x="297.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">leave-one-out, KL budget</text>
-<polygon points="279.0,27.0 283.8,35.7 274.2,35.7" fill="#009E73"/>
-<text x="297.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">own reward only (γ = 0)</text>
-<polygon points="279.0,45.8 284.2,51.0 279.0,56.2 273.8,51.0" fill="#CC79A7"/>
-<text x="297.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">one item per episode</text>
-<path d="M515.0,9.0 L523.0,17.0 M515.0,17.0 L523.0,9.0" stroke="#D55E00" stroke-width="2.4" fill="none"/>
-<text x="537.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">learning rate ×10</text>
-<polygon points="519.0,25.8 520.6,29.7 524.9,30.1 521.6,32.9 522.6,37.0 519.0,34.8 515.4,37.0 516.4,32.9 513.1,30.1 517.4,29.7" fill="#222222"/>
-<text x="537.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, generated lists</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="766" height="395" viewBox="0 0 766 395" font-family="New Computer Modern">
+<line x1="36.0" y1="13" x2="58.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
+<circle cx="47.0" cy="13.0" r="4.2" fill="#0072B2"/>
+<text x="65.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">value model, fixed anchor weight</text>
+<polygon points="43.1,28.1 50.9,28.1 50.9,35.9 43.1,35.9" fill="#0072B2"/>
+<text x="65.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">value model, KL budget</text>
+<line x1="36.0" y1="51" x2="58.0" y2="51" stroke="#E69F00" stroke-width="1.6"/>
+<circle cx="47.0" cy="51.0" r="4.2" fill="#E69F00"/>
+<text x="65.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">leave-one-out, fixed anchor weight</text>
+<polygon points="283.1,9.1 290.9,9.1 290.9,16.9 283.1,16.9" fill="#E69F00"/>
+<text x="305.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">leave-one-out, KL budget</text>
+<polygon points="287.0,27.0 291.8,35.7 282.2,35.7" fill="#009E73"/>
+<text x="305.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">own reward only (γ = 0)</text>
+<polygon points="287.0,45.8 292.2,51.0 287.0,56.2 281.8,51.0" fill="#CC79A7"/>
+<text x="305.0" y="55.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">one item per episode</text>
+<path d="M523.0,9.0 L531.0,17.0 M523.0,17.0 L531.0,9.0" stroke="#D55E00" stroke-width="2.4" fill="none"/>
+<text x="545.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">learning rate ×10</text>
+<polygon points="527.0,25.8 528.6,29.7 532.9,30.1 529.6,32.9 530.6,37.0 527.0,34.8 523.4,37.0 524.4,32.9 521.1,30.1 525.4,29.7" fill="#222222"/>
+<text x="545.0" y="36.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">base recommender, generated lists</text>
 <line x1="59.3" y1="93" x2="59.3" y2="199" stroke="#e4e4e4"/>
 <text x="59.3" y="213.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">0.01</text>
 <line x1="117.0" y1="93" x2="117.0" y2="199" stroke="#e4e4e4"/>
@@ -277,5 +277,5 @@
 <polygon points="635.9,275.0 641.1,280.2 635.9,285.4 630.6,280.2" fill="#CC79A7"/>
 <polygon points="656.4,286.1 661.7,291.3 656.4,296.5 651.2,291.3" fill="#CC79A7"/>
 <polygon points="553.8,257.1 555.4,261.0 559.6,261.3 556.4,264.1 557.4,268.2 553.8,266.0 550.1,268.2 551.1,264.1 547.9,261.3 552.1,261.0" fill="#222222"/>
-<text x="375.0" y="389.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">KL from the base recommender, nats per item</text>
+<text x="383.0" y="389.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">KL from the base recommender, nats per item</text>
 </svg>

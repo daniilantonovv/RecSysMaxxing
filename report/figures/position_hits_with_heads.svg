@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="750" height="357" viewBox="0 0 750 357" font-family="New Computer Modern">
-<line x1="28.0" y1="13" x2="50.0" y2="13" stroke="#222222" stroke-width="1.6"/>
-<polygon points="35.1,9.1 42.9,9.1 42.9,16.9 35.1,16.9" fill="#222222"/>
-<text x="57.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">ranked list</text>
-<line x1="268.0" y1="13" x2="290.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
-<circle cx="279.0" cy="13.0" r="4.2" fill="#0072B2"/>
-<text x="297.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">generated list</text>
-<line x1="508.0" y1="13" x2="530.0" y2="13" stroke="#009E73" stroke-width="1.6"/>
-<polygon points="519.0,8.0 523.8,16.7 514.2,16.7" fill="#009E73"/>
-<text x="537.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">one head per position</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="766" height="357" viewBox="0 0 766 357" font-family="New Computer Modern">
+<line x1="36.0" y1="13" x2="58.0" y2="13" stroke="#222222" stroke-width="1.6"/>
+<polygon points="43.1,9.1 50.9,9.1 50.9,16.9 43.1,16.9" fill="#222222"/>
+<text x="65.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">ranked list</text>
+<line x1="276.0" y1="13" x2="298.0" y2="13" stroke="#0072B2" stroke-width="1.6"/>
+<circle cx="287.0" cy="13.0" r="4.2" fill="#0072B2"/>
+<text x="305.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">generated list</text>
+<line x1="516.0" y1="13" x2="538.0" y2="13" stroke="#009E73" stroke-width="1.6"/>
+<polygon points="527.0,8.0 531.8,16.7 522.2,16.7" fill="#009E73"/>
+<text x="545.0" y="17.0" font-size="12" text-anchor="start" font-weight="normal" fill="#222222">one head per position</text>
 <line x1="48.0" y1="55" x2="48.0" y2="161" stroke="#e4e4e4"/>
 <text x="48.0" y="175.0" font-size="11" text-anchor="middle" font-weight="normal" fill="#222222">1</text>
 <line x1="69.1" y1="55" x2="69.1" y2="161" stroke="#e4e4e4"/>
@@ -404,5 +404,5 @@
 <polygon points="695.8,292.0 700.6,300.7 690.9,300.7" fill="#009E73"/>
 <polygon points="716.9,293.4 721.7,302.1 712.1,302.1" fill="#009E73"/>
 <polygon points="738.0,296.9 742.8,305.6 733.2,305.6" fill="#009E73"/>
-<text x="375.0" y="351.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">position in the list</text>
+<text x="383.0" y="351.0" font-size="12" text-anchor="middle" font-weight="normal" fill="#222222">position in the list</text>
 </svg>
