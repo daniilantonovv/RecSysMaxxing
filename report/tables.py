@@ -681,13 +681,13 @@ CHANGE_TABLES = (
                 Change("Training reward model", "predicted/train/played_ratio"),
                 Change("Held-out reward model", "predicted/heldout/played_ratio"),
                 Change("Held-out, list shown to another user", "predicted/heldout/played_ratio_for_other_user"),
-                Change("Held-out, relative to the item's usual", "predicted/heldout/relative_ratio"),
+                Change("Held-out, relative share", "predicted/heldout/relative_ratio"),
             )),
             ("Logged response to the recommended items the user went on to consume", (
                 Change("Such items per list", "logged/hits_per_list", has_interval=False),
                 Change("Their logged share", "logged/played_ratio_of_hits", has_interval=False),
                 Change("Logged share per recommended item", "logged/played_ratio_per_item", decimals=4),
-                Change("Logged share above the item's usual, per item", "logged/relative_surplus_per_item", decimals=4),
+                Change("Logged surplus per recommended item", "logged/relative_surplus_per_item", decimals=4),
             )),
             ("Lists", (
                 Change("Catalogue coverage", "profile/catalog_coverage", has_interval=False),
@@ -886,7 +886,7 @@ SEED_PANELS = (
         relative_change_row("NDCG@10, change in %", "next_k/all/ndcg@10"),
         SeedRow("Predicted share, held-out model, change in %", **both("rl_vs_pretrained", "predicted/heldout/played_ratio", "relative_change"), decimals=2, scale=100, signed=True),
         relative_change_row("Logged share per recommended item, change in %", "next_k/logged/played_ratio_per_item"),
-        SeedRow("Logged surplus per recommended item, change", **both("rl_vs_pretrained_significance", "logged/relative_surplus_per_item", "change"), decimals=4, signed=True),
+        relative_change_row("Logged surplus per recommended item, change in %", "next_k/logged/relative_surplus_per_item"),
         SeedRow("Personal share of the predicted gain, %", **both("reward_gain_decomposition", "RL", "personal share of the gain"), decimals=1, scale=100),
         SeedRow("KL from the base recommender", **both("rl_vs_pretrained", "training/kl_to_reference", "rl")),
     )),
@@ -947,6 +947,14 @@ def three_seed_statistics(dataset: str) -> dict[tuple[str, str, str], tuple[floa
         return {(row["report"], row["row"], row["column"]): (float(row["mean"]), float(row["std"])) for row in csv.DictReader(file)}
 
 
+def spread(deviation: float, row: SeedRow) -> str:
+    """A standard deviation as printed; one that rounds to zero shows the bound it lies below, as seeds 1 and 2 were saved at four decimals."""
+    text = formatted(deviation, row.decimals, row.scale)
+    if deviation > 0 and float(text) == 0:
+        return "<" + formatted(10 ** -row.decimals / row.scale, row.decimals, row.scale)
+    return text
+
+
 def seeds_table() -> str:
     body: list[list[str] | str] = []
     for title, rows in SEED_PANELS:
@@ -956,7 +964,7 @@ def seeds_table() -> str:
             for dataset in DATASET_NAMES:
                 key = getattr(row, dataset)
                 statistic = three_seed_statistics(dataset).get(key) if key else None
-                cells.append(MISSING if statistic is None else f"{formatted(statistic[0], row.decimals, row.scale, signed=row.signed)} ± {formatted(statistic[1], row.decimals, row.scale)}")
+                cells.append(MISSING if statistic is None else f"{formatted(statistic[0], row.decimals, row.scale, signed=row.signed)} ± {spread(statistic[1], row)}")
             body.append([row.label, *cells])
     return typst_table(list(DATASET_NAMES.values()), (), body)
 

@@ -35,11 +35,11 @@ online cinema, is the main dataset; Yambda-50M, a music service, repeats the cen
 - **Q5, the trade-off.** RL settings (anchor, estimator, credit along the list, capacity) only choose a point on the
   frontier. Re-ranking or decoding by the closed-form optimum of the anchored objective reaches it without training.
   The frontier moved only when the reward came from the log: reward-weighted fine-tuning on the logged share
-  relative to the item's usual, with no reward model. A control written down before its run separates its weights
-  from the extra epoch of training it adds: over the same epoch with every weight equal to one, the weights raise a
-  length-neutral logged response by 21% and personalisation by 19% on generated lists (17% and 15% on ranked lists),
-  with NDCG@10 up by 1.3% (0.7%), in every seed. A third of the 1.9% NDCG@10 gain over the base recommender is the
-  epoch's.
+  relative to what is typical for the item, with no reward model. A control written down before its run separates
+  its weights from the extra epoch of training it adds: over the same epoch with every weight equal to one, the
+  weights raise a length-neutral logged response by 21% and personalisation by 19% on generated lists (17% and 15%
+  on ranked lists), with NDCG@10 up by 1.3% (0.7%), in every seed. A third of the 1.9% NDCG@10 gain over the base
+  recommender is the epoch's.
 - **Limits.** Everything is offline. Yambda's base recommender is below replaying the user's own history, so relevance
   there is measured against a weak start. The models are small (4 layers of width 256).
 
@@ -75,7 +75,7 @@ The last two rows come from the frontier session (`results/kion_frontier`), the 
 | Split | one time axis for all users: the last 7 days are the test period, the 7 days before them the validation period | the same |
 | Requests | one per user active in the test week, at its start: 59,997; the history is the last 38 events, the targets the next 20 | 7,593; the last 118 events and the next 20 |
 | Recommender | GPT-2, 4 layers of width 256, full-softmax next-item loss, early stopping on the validation loss | the same, with windows of 128 events |
-| Reward models | a second GPT-2 reading each item with the response to the item before it; heads for the consumed share, the share relative to the item's usual, session continuation, return and choice; two copies on disjoint halves of the users, one gives rewards, one only judges | plus likes, dislikes and adoption (a new track played again in a later session within 14 days) |
+| Reward models | a second GPT-2 reading each item with the response to the item before it; heads for the consumed share, the share relative to what is typical for the item, session continuation and return, and a choice head that no reported run uses (see the design decisions below); two copies on disjoint halves of the users, one gives rewards, one only judges | plus likes, dislikes and adoption (a new track played again in a later session within 14 days) |
 | RL | PPO with a value model and generalised advantage estimation (γ = 0.99, λ = 0.9), 512 lists of 10 per iteration, learning rate 1e-5, KL anchor β; the main run has β = 0.3 and 2,000 iterations, sweep runs 1,000 | the same |
 | Evaluation | Recall, NDCG, MAP and HitRate at 1, 5 and 10, also by outcome (consumed at least half or not; above or below the item's usual share); the logged response to recommended items; the held-out reward model; the same lists scored for another user; coverage, Gini, the share of the most shown 1% of items, overlap between users' lists | the same |
 | Statistics | paired bootstrap over users (2,000 resamples) for every change; three seeds for the central comparisons | three seeds for the core comparisons |
@@ -291,11 +291,13 @@ docs/            the reading list the study started from
   every event of a real history, and a generated item can be scored before its outcome exists.
 - **Two reward models.** `train` generates rewards during RL, `heldout` is fitted on other users and
   only evaluates. A reward gain that `heldout` does not confirm is exploitation of `train`'s errors.
-- **The reward model knows what users chose, not only how they responded.** Logged events are all items
-  somebody picked, so a model of the played ratio alone says nothing about an item this user would never
-  pick. A fourth head is trained to tell the logged item from another item put in its place, one swap
-  per window, the replacement drawn as often as items are consumed. `RewardSpec(weigh_by_choice=True)`
-  multiplies the reward by that probability.
+- **A choice head, tried and set aside.** Logged events are all items somebody picked, so a model of the
+  played ratio alone says nothing about an item this user would never pick. A fourth head is trained to
+  tell the logged item from another item put in its place, one swap per window, the replacement drawn as
+  often as items are consumed, and `RewardSpec(weigh_by_choice=True)` multiplies the reward by that
+  probability. The head does not track relevance: it separates the user's real next items from the other
+  candidates with an AUC of about 0.57 on KION and 0.60 on Yambda, below the recommender's own
+  log-probability (0.70 and 0.66), so the paper reports no run that uses it.
 - **Retention is two signals, and absence needs evidence.** `session_continues`: the next event follows
   within the session gap. `returns`: another session starts within the return window. "Nothing followed"
   is a fact only once the waiting time has passed inside the observed data; until then the label is
@@ -322,8 +324,8 @@ docs/            the reading list the study started from
 - **A reward no model predicts.** A recommended item that is among the user's next events comes with the
   response the log recorded. `logged/played_ratio_of_hits` and `logged/relative_ratio_of_hits` average it over
   those items; `logged/played_ratio_per_item` counts the others as nothing and is compared user by user, and
-  `logged/relative_surplus_per_item` does the same for the response above the item's usual. Hits are a selected
-  sample of the recommendations: this says how the reached items were received.
+  `logged/relative_surplus_per_item` does the same for the response above what is typical for the item. Hits are
+  a selected sample of the recommendations: this says how the reached items were received.
 - **The played ratio relative to the item.** `relative_ratio` is the played ratio as a quantile among the
   item's train-period events, so every item's mean is 0.5 and a series that few finish stands on one scale
   with a film that most finish. The reward model predicts it with a fifth head, and
